@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 
 artchitecture.md
+backend-todo.md
 
 
 # C extensions
@@ -141,6 +142,7 @@ celerybeat.pid
 .env
 .envrc
 .venv
+backend/env.local.txt
 env/
 venv/
 ENV/
