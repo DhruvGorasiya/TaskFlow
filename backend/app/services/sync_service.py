@@ -13,7 +13,9 @@ from app.models.task import Task
 from app.schemas.task import TaskCreate
 
 
-async def upsert_tasks(session: AsyncSession, tasks: list[TaskCreate]) -> dict[str, int]:
+async def upsert_tasks(
+    session: AsyncSession, tasks: list[TaskCreate]
+) -> dict[str, int]:
     """Upsert tasks by `(source, external_id)` and return sync stats.
 
     Notes:
@@ -23,6 +25,18 @@ async def upsert_tasks(session: AsyncSession, tasks: list[TaskCreate]) -> dict[s
     """
     if not tasks:
         return {"created": 0, "updated": 0, "total": 0}
+
+    # Defensive: de-duplicate incoming tasks by (source, external_id).
+    # If duplicates exist, we keep the *last* occurrence so the most recent
+    # normalized payload wins and our stats/total remain meaningful.
+    unique: dict[tuple[str, str], TaskCreate] = {}
+    for t in tasks:
+        key = (t.source, t.external_id)
+        if key in unique:
+            # Move to end to reflect "last wins" deterministically.
+            del unique[key]
+        unique[key] = t
+    tasks = list(unique.values())
 
     now = datetime.now(tz=timezone.utc)
 
@@ -39,7 +53,7 @@ async def upsert_tasks(session: AsyncSession, tasks: list[TaskCreate]) -> dict[s
             Task.external_id.in_(external_ids),
         )
         res = await session.execute(stmt_existing)
-        existing_count += len(list(res.scalars().all()))
+        existing_count += len(res.scalars().all())
 
     rows = [
         {
@@ -86,4 +100,3 @@ async def upsert_tasks(session: AsyncSession, tasks: list[TaskCreate]) -> dict[s
         "updated": existing_count,
         "total": len(tasks),
     }
-

@@ -55,4 +55,4 @@ class TaskRead(TaskBase):
     created_at: datetime
     updated_at: datetime
     synced_at: datetime
-
+    notion_page_id: str | None = None

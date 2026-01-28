@@ -11,11 +11,14 @@ import {
   todayYYYYMMDD,
 } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { triggerCanvasSync } from "@/lib/api";
+import { triggerCanvasSync, triggerNotionSync, type NotionSyncResult } from "@/lib/api";
 import { Calendar, Loader2 } from "lucide-react";
 
 export function AgendaView() {
   const [syncing, setSyncing] = useState(false);
+  const [notionSyncing, setNotionSyncing] = useState(false);
+  const [notionResult, setNotionResult] = useState<NotionSyncResult | null>(null);
+  const [notionError, setNotionError] = useState<string | null>(null);
   const {
     courses,
     coursesLoading,
@@ -55,6 +58,23 @@ export function AgendaView() {
       /* feedback via refetch error if needed */
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleNotionPush = async () => {
+    if (!selectedCourseIds.length) return;
+    setNotionSyncing(true);
+    setNotionError(null);
+    setNotionResult(null);
+    try {
+      const res = await triggerNotionSync(selectedCourseIds);
+      setNotionResult(res);
+    } catch (err) {
+      setNotionError(
+        err instanceof Error ? err.message : "Failed to push tasks to Notion.",
+      );
+    } finally {
+      setNotionSyncing(false);
     }
   };
 
@@ -100,7 +120,7 @@ export function AgendaView() {
             return (
               <label
                 key={c.id}
-                className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm transition-colors hover:border-slate-600 hover:bg-slate-900/60 has-[:checked]:border-sky-500 has-[:checked]:bg-sky-500/10"
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm transition-colors hover:border-slate-600 hover:bg-slate-900/60 has-checked:border-sky-500 has-checked:bg-sky-500/10"
               >
                 <input
                   type="checkbox"
@@ -128,9 +148,35 @@ export function AgendaView() {
                 "Sync selected"
               )}
             </Button>
+            <Button
+              variant="secondary"
+              onClick={handleNotionPush}
+              disabled={!selectedCourseIds.length || notionSyncing}
+            >
+              {notionSyncing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Push selected to Notion"
+              )}
+            </Button>
             <Button variant="secondary" onClick={refetch}>
               Refresh
             </Button>
+          </div>
+        )}
+
+        {notionError && (
+          <p className="mt-3 text-sm font-medium text-red-400">{notionError}</p>
+        )}
+        {notionResult && !notionError && (
+          <div className="mt-4 rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-300">
+            <p className="font-medium text-slate-50">
+              Pushed {notionResult.total} tasks to Notion
+            </p>
+            <p className="mt-1 text-slate-400">
+              {notionResult.created} created, {notionResult.updated} updated,{" "}
+              {notionResult.failed} failed.
+            </p>
           </div>
         )}
       </section>

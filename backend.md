@@ -104,6 +104,8 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 | `database_url` | `str` | `postgresql+asyncpg://postgres:postgres@localhost:5432/taskflow` | Async SQLAlchemy URL |
 | `canvas_api_url` | `str \| None` | `None` | Canvas base URL (no `/api/v1`). Required for Canvas. |
 | `canvas_api_token` | `str \| None` | `None` | Canvas API token. Required for Canvas. |
+| `notion_api_token` | `str \| None` | `None` | Notion integration token. Required for Notion push. |
+| `notion_database_id` | `str \| None` | `None` | Notion database ID. Required for Notion push. |
 | `enable_scheduler` | `bool` | `False` | If `True`, start APScheduler on app startup |
 | `sync_interval_minutes` | `int` | `15` | Canvas sync interval when scheduler enabled |
 | `cors_origins` | `str \| None` | `None` | Comma-separated allowed origins. If unset, `http://localhost:3000` and `http://127.0.0.1:3000` |
@@ -136,6 +138,7 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 | `priority` | ENUM | `high` \| `medium` \| `low` \| `none`; default `none` |
 | `status` | ENUM | `pending` \| `completed` \| `archived`; default `pending` |
 | `course_or_category` | VARCHAR(255) | nullable; e.g. Canvas course name |
+| `notion_page_id` | VARCHAR(36) | nullable; Notion page ID when pushed |
 | `created_at` | TIMESTAMPTZ | `now()` |
 | `updated_at` | TIMESTAMPTZ | `now()`, updated on change |
 | `synced_at` | TIMESTAMPTZ | `now()`; updated on sync upsert |
@@ -146,6 +149,7 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 
 - **Config:** `alembic.ini`; env uses `app.config.settings.database_url` and `app.database.Base`.
 - **Initial migration:** `20260128_0001_create_tasks_table` creates enums (`task_source`, `task_priority`, `task_status`) with `checkfirst=True`, then `tasks` table and indexes.
+- **`20260128_0002_add_notion_page_id_to_tasks`:** Adds `notion_page_id` column.
 - **Run:** `alembic -c alembic.ini upgrade head` (from `backend/`).
 
 ---
@@ -187,7 +191,8 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/integrations/canvas/courses` | List active Canvas courses for UI toggles. Returns `[{ id, name }]`. 401 if auth fails, 502 on request errors. |
-| `POST` | `/api/integrations/canvas/sync` | Trigger Canvas sync. Optional body: `{ "course_ids": [1, 2, 3] }`. If present, only those courses are synced; otherwise all active courses. Returns `{ created, updated, total }`. 202 Accepted. 401 auth error, 502 request error. |
+| `POST` | `/api/integrations/canvas/sync` | Trigger Canvas sync. Optional body: `{ "course_ids": [1, 2, 3] }`. If present, only those courses are synced; otherwise all active courses. Returns `{ created, updated, total }`. 200 OK. 401 auth error, 502 request error. |
+| `POST` | `/api/integrations/notion/sync` | Push tasks to Notion. Optional body: `{ "task_ids": ["uuid", ...] }` (takes precedence), or `{ "course_ids": [1, 2, 3] }` (Canvas only; pushes pending+completed). If no body provided, pushes all (up to 500). Returns `{ created, updated, failed, total }`. 200 OK. 401/502 on auth/request errors. |
 
 ### 6.4 Dependencies
 
@@ -252,6 +257,14 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 - **`CanvasSyncRequest`:** Optional `course_ids: list[int] | None` for `POST /canvas/sync` body.
 - **`CanvasAssignment`:** `id`, `name`, `description`, `due_at`, `course`, `submission` (optional; when `include[]=submission`).
 
+### 8.5 Notion (push to Notion)
+
+- **Direction:** TaskFlow **pushes** tasks to a Notion database (destination). Opposite of Canvas (source).
+- **Config:** `NOTION_API_TOKEN`, `NOTION_DATABASE_ID`. Database must have properties: **Name** (title), **Description** (rich_text), **Due Date** (date), **Priority** (select: high|medium|low|none), **Status** (select: pending|completed|archived), **Course** (rich_text), **Source** (rich_text).
+- **`NotionClient`** (`app.integrations.notion.client`): `get_database`, `create_page`, `update_page`, `archive_page`. Uses Notion API `2022-06-28`.
+- **`NotionAdapter`** (`app.integrations.notion.adapter`): `authenticate()`, `push(session, task_ids=None, limit=500)`. Maps `Task` → Notion properties; creates pages for tasks without `notion_page_id`, updates otherwise; stores `notion_page_id` on tasks.
+- **`Task`** model has nullable `notion_page_id`; **`TaskRead`** exposes it.
+
 ---
 
 ## 9. Background Scheduler (`app.jobs.sync_scheduler`)
@@ -283,6 +296,7 @@ docker compose -f backend/docker-compose.yml up -d
 1. Copy `backend/env.example.txt` to `backend/env.local.txt`.
 2. Set `DATABASE_URL` if different from default.
 3. Set `CANVAS_API_URL` and `CANVAS_API_TOKEN` for Canvas.
+4. Optional: `NOTION_API_TOKEN` and `NOTION_DATABASE_ID` for Notion push.
 
 ### 10.3 Migrations
 
@@ -355,13 +369,16 @@ pytest -q
 | Task model | `app/models/task.py` |
 | Task schemas | `app/schemas/task.py` |
 | Task CRUD API | `app/api/routes/tasks.py` |
-| Canvas courses & sync API | `app/api/routes/integrations.py` |
+| Canvas & Notion integrations API | `app/api/routes/integrations.py` |
 | Task business logic | `app/services/task_service.py` |
 | Sync upsert | `app/services/sync_service.py` |
 | Integration contract | `app/integrations/base.py` |
 | Canvas API client | `app/integrations/canvas/client.py` |
 | Canvas sync logic | `app/integrations/canvas/adapter.py` |
 | Canvas DTOs | `app/integrations/canvas/schemas.py` |
+| Notion client | `app/integrations/notion/client.py` |
+| Notion push logic | `app/integrations/notion/adapter.py` |
+| Notion DTOs | `app/integrations/notion/schemas.py` |
 | Scheduled sync | `app/jobs/sync_scheduler.py` |
 | Migrations | `alembic/versions/` |
 | Run script | `backend/start-backend.sh` |

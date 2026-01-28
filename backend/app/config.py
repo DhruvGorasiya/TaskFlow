@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     canvas_api_url: str | None = None
     canvas_api_token: str | None = None
 
+    # Optional until you enable Notion push. Database must have properties:
+    # Name (title), Description (rich_text), Due Date (date), Priority (select),
+    # Status (select), Course (rich_text), Source (rich_text).
+    notion_api_token: str | None = None
+    notion_database_id: str | None = None
+
     enable_scheduler: bool = False
     sync_interval_minutes: int = 15
 

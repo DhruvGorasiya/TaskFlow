@@ -84,6 +84,8 @@ Notes:
 - `database_url: str`
 - `canvas_api_url: str | None`
 - `canvas_api_token: str | None`
+- `notion_api_token: str | None`
+- `notion_database_id: str | None`
 - `enable_scheduler: bool` (default `False`)
 - `sync_interval_minutes: int` (default `15`)
 
@@ -180,8 +182,10 @@ Endpoints:
   - `POST /api/tasks`
   - `PATCH /api/tasks/{id}`
   - `DELETE /api/tasks/{id}`
-- Canvas sync:
+- Integrations:
+  - `GET /api/integrations/canvas/courses`
   - `POST /api/integrations/canvas/sync`
+  - `POST /api/integrations/notion/sync`
 
 Interactive docs:
 
@@ -228,7 +232,68 @@ On app startup:
 
 Disable by setting `ENABLE_SCHEDULER=false`.
 
-## 9. Running tests
+## 9. Notion push
+
+TaskFlow can **push** tasks to a Notion database so they appear as pages there. This is the opposite of Canvas (which **pulls** assignments into TaskFlow).
+
+### Setup
+
+1. Create a [Notion integration](https://www.notion.so/my-integrations) and copy the **Internal Integration Token**.
+2. Create a new **database** in Notion (full-page or inside a page).
+3. Add these properties (names and types must match exactly):
+
+   | Property    | Type      | Notes                                                |
+   |------------|-----------|------------------------------------------------------|
+   | Name       | Title     | Default title                                       |
+   | Description| Rich text |                                                      |
+   | Due Date   | Date      |                                                      |
+   | Priority   | Select    | Options: `high`, `medium`, `low`, `none`            |
+   | Status     | Select    | Options: `pending`, `completed`, `archived`         |
+   | Course     | Rich text | e.g. Canvas course name                             |
+   | Source     | Rich text | e.g. `canvas`                                       |
+
+4. Share the database with your integration (⋯ → Connections → Add connection).
+5. Copy the database ID from the URL: `https://notion.so/...?v=...` or from the “Copy link” → the part after the workspace and before any `?`.
+6. Set in `env.local.txt`:
+
+   ```text
+   NOTION_API_TOKEN=secret_...
+   NOTION_DATABASE_ID=abc123...
+   ```
+
+### Sync API
+
+```bash
+# Push all tasks (up to 500)
+curl -X POST http://localhost:8000/api/integrations/notion/sync
+
+# Push tasks for selected Canvas courses (pending + completed only)
+curl -X POST http://localhost:8000/api/integrations/notion/sync \
+  -H "Content-Type: application/json" \
+  -d '{"course_ids": [1, 2, 3]}'
+
+# Push specific tasks only
+curl -X POST http://localhost:8000/api/integrations/notion/sync \
+  -H "Content-Type: application/json" \
+  -d '{"task_ids": ["uuid-1", "uuid-2"]}'
+```
+
+Response:
+
+```json
+{"created": 5, "updated": 2, "failed": 0, "total": 7}
+```
+
+- Tasks without `notion_page_id` → new Notion pages are created and the ID is stored.
+- Tasks with `notion_page_id` → existing Notion pages are updated.
+- All TaskFlow fields (title, description, due date, priority, status, course/source) are synced to the matching Notion properties.
+
+Notes:
+
+- If `task_ids` is provided, it takes precedence over `course_ids`.
+- When `course_ids` is provided, only Canvas tasks with status `pending` or `completed` are pushed (archived tasks are skipped).
+
+## 10. Running tests
 
 From `backend/`:
 
@@ -244,7 +309,7 @@ What’s covered:
   - Smoke test hitting real Canvas `/courses` (requires valid token)
   - Error-handling test that mocks `httpx` and asserts `IntegrationAuthError`
 
-## 10. Notes
+## 11. Notes
 
 - This backend intentionally has **no user auth** yet (personal/local use).
 - Task uniqueness is enforced by:

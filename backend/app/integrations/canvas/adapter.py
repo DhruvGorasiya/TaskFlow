@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.integrations.base import IntegrationAuthError, IntegrationBase
+from app.integrations.base import (
+    IntegrationAuthError,
+    IntegrationBase,
+    IntegrationRequestError,
+)
 from app.integrations.canvas.client import CanvasClient
 from app.integrations.canvas.schemas import CanvasCourseListItem
 from app.schemas.task import TaskCreate
 from app.services.sync_service import upsert_tasks
+
+logger = logging.getLogger(__name__)
 
 
 class CanvasAdapter(IntegrationBase):
@@ -64,7 +72,19 @@ class CanvasAdapter(IntegrationBase):
                 assignments = await self._client.list_assignments(
                     course.id, include_submission=True
                 )
-            except IntegrationAuthError:
+            except IntegrationAuthError as exc:
+                logger.warning(
+                    "Canvas auth error listing assignments for course_id=%s: %s",
+                    course.id,
+                    exc,
+                )
+                continue
+            except IntegrationRequestError as exc:
+                logger.warning(
+                    "Canvas request error listing assignments for course_id=%s: %s",
+                    course.id,
+                    exc,
+                )
                 continue
             for assignment in assignments:
                 sub = assignment.submission

@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# macOS noise
+.DS_Store
+
 artchitecture.md
 backend-todo.md
 
