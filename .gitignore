@@ -6,6 +6,8 @@ __pycache__/
 artchitecture.md
 backend-todo.md
 
+backend/tests/*
+
 
 # C extensions
 *.so
