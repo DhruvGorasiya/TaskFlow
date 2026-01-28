@@ -21,6 +21,19 @@ class CanvasCourse(BaseModel):
     name: str | None = None
 
 
+class CanvasCourseListItem(BaseModel):
+    """Minimal course info for UI toggles (list / select)."""
+
+    id: int
+    name: str | None = None
+
+
+class CanvasSyncRequest(BaseModel):
+    """Optional body for POST /integrations/canvas/sync."""
+
+    course_ids: list[int] | None = None
+
+
 class CanvasAssignment(BaseModel):
     """Subset of Canvas assignment fields used by TaskFlow."""
 

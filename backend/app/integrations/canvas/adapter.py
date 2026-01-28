@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.integrations.base import IntegrationAuthError, IntegrationBase
 from app.integrations.canvas.client import CanvasClient
+from app.integrations.canvas.schemas import CanvasCourseListItem
 from app.schemas.task import TaskCreate
 from app.services.sync_service import upsert_tasks
 
@@ -35,20 +36,33 @@ class CanvasAdapter(IntegrationBase):
         await self._client.list_courses(per_page=1)
         return True
 
-    async def fetch_tasks(self) -> list[TaskCreate]:
-        """Fetch Canvas courses + assignments and normalize into TaskCreate."""
+    async def list_courses(self) -> list[CanvasCourseListItem]:
+        """List active Canvas courses for UI toggles."""
         courses = await self._client.list_courses()
+        return [CanvasCourseListItem(id=c.id, name=c.name) for c in courses]
+
+    async def fetch_tasks(self, course_ids: list[int] | None = None) -> list[TaskCreate]:
+        """Fetch Canvas courses + assignments and normalize into TaskCreate.
+
+        If course_ids is provided, only those courses are fetched. Otherwise all
+        active courses are used.
+        """
+        if course_ids:
+            courses = []
+            for cid in course_ids:
+                course = await self._client.get_course(cid)
+                if course is not None:
+                    courses.append(course)
+        else:
+            courses = await self._client.list_courses()
 
         tasks: list[TaskCreate] = []
         for course in courses:
             try:
                 assignments = await self._client.list_assignments(course.id)
             except IntegrationAuthError:
-                # Some courses may be restricted; skip those rather than failing the whole sync.
                 continue
             for assignment in assignments:
-                # Attach minimal course context for normalization/UI grouping.
-                # Use mode="json" so datetimes become ISO strings and are JSON-serializable.
                 assignment_data = assignment.model_dump(mode="json")
                 assignment_data["course"] = {"id": course.id, "name": course.name}
 
@@ -69,8 +83,13 @@ class CanvasAdapter(IntegrationBase):
 
         return tasks
 
-    async def sync(self, session: AsyncSession) -> dict[str, int]:
-        """Fetch tasks from Canvas and upsert into database."""
+    async def sync(
+        self, session: AsyncSession, course_ids: list[int] | None = None
+    ) -> dict[str, int]:
+        """Fetch tasks from Canvas and upsert into database.
+
+        If course_ids is provided, only those courses are synced.
+        """
         await self.authenticate()
-        tasks = await self.fetch_tasks()
+        tasks = await self.fetch_tasks(course_ids=course_ids)
         return await upsert_tasks(session, tasks)

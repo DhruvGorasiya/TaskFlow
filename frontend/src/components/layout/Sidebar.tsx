@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LayoutList, Settings, Workflow } from "lucide-react";
+import { CalendarDays, LayoutList, Settings, Workflow } from "lucide-react";
 
 const navItems = [
   { href: "/tasks", label: "Dashboard", icon: LayoutList },
+  { href: "/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -34,7 +35,8 @@ export function Sidebar() {
             const Icon = item.icon;
             const isActive =
               pathname === item.href ||
-              (item.href === "/tasks" && pathname === "/");
+              (item.href === "/tasks" && pathname === "/") ||
+              (item.href === "/agenda" && pathname?.startsWith("/agenda"));
             return (
               <Link
                 key={item.href}
@@ -80,7 +82,8 @@ export function Sidebar() {
               const Icon = item.icon;
               const isActive =
                 pathname === item.href ||
-                (item.href === "/tasks" && pathname === "/");
+                (item.href === "/tasks" && pathname === "/") ||
+                (item.href === "/agenda" && pathname?.startsWith("/agenda"));
               return (
                 <Link
                   key={item.href}

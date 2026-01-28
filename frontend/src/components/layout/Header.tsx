@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 
 function getTitle(pathname: string): string {
   if (pathname.startsWith("/settings")) return "Settings";
+  if (pathname.startsWith("/agenda")) return "Agenda";
   if (pathname.startsWith("/tasks")) return "Dashboard";
   return "TaskFlow";
 }

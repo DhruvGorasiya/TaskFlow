@@ -28,16 +28,19 @@ async def list_tasks_endpoint(
     ),
     due_from: datetime | None = Query(default=None, description="Filter tasks due on/after this datetime"),
     due_to: datetime | None = Query(default=None, description="Filter tasks due on/before this datetime"),
+    course_ids: list[int] = Query(default=[], description="Filter Canvas tasks by course IDs (e.g. ?course_ids=1&course_ids=2)"),
     limit: int = Query(default=200, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[TaskRead]:
     """List tasks with optional filtering and pagination."""
+    cids = course_ids if course_ids else None
     tasks = await task_service.list_tasks(
         db,
         source=source,
         status_value=status_value,
         due_from=due_from,
         due_to=due_to,
+        course_ids=cids,
         limit=limit,
         offset=offset,
     )

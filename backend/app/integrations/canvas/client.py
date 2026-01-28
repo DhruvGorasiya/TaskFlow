@@ -65,6 +65,14 @@ class CanvasClient:
         raw = await self._get("/courses", params=params)
         return [CanvasCourse.model_validate(item) for item in raw]
 
+    async def get_course(self, course_id: int) -> CanvasCourse | None:
+        """Fetch a single course by ID. Returns None if not found or inaccessible."""
+        try:
+            raw = await self._get(f"/courses/{course_id}")
+            return CanvasCourse.model_validate(raw)
+        except (IntegrationAuthError, IntegrationRequestError):
+            return None
+
     async def list_assignments(self, course_id: int, *, per_page: int = 50) -> list[CanvasAssignment]:
         """List assignments for a course."""
         raw = await self._get(f"/courses/{course_id}/assignments", params={"per_page": per_page})

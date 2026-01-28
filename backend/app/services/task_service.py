@@ -9,11 +9,18 @@ import uuid
 from datetime import datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, delete, select
+from sqlalchemy import Select, cast, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.types import Integer
 
 from app.models.task import Task
 from app.schemas.task import TaskCreate, TaskUpdate
+
+
+def _course_id_expr():
+    """Extract Canvas course id from source_metadata for filtering."""
+    raw = Task.source_metadata["course"]["id"]
+    return cast(raw.astext, Integer)
 
 
 def _apply_task_filters(
@@ -23,6 +30,7 @@ def _apply_task_filters(
     status_value: str | None,
     due_from: datetime | None,
     due_to: datetime | None,
+    course_ids: list[int] | None,
 ) -> Select[tuple[Task]]:
     if source:
         stmt = stmt.where(Task.source == source)
@@ -32,6 +40,10 @@ def _apply_task_filters(
         stmt = stmt.where(Task.due_date.is_not(None)).where(Task.due_date >= due_from)
     if due_to:
         stmt = stmt.where(Task.due_date.is_not(None)).where(Task.due_date <= due_to)
+    if course_ids:
+        stmt = stmt.where(Task.source == "canvas").where(
+            _course_id_expr().in_(course_ids)
+        )
     return stmt
 
 
@@ -42,12 +54,23 @@ async def list_tasks(
     status_value: str | None = None,
     due_from: datetime | None = None,
     due_to: datetime | None = None,
+    course_ids: list[int] | None = None,
     limit: int = 200,
     offset: int = 0,
 ) -> list[Task]:
-    """List tasks with optional filters."""
+    """List tasks with optional filters.
+
+    When course_ids is provided, only Canvas tasks from those courses are returned.
+    """
     stmt = select(Task).order_by(Task.due_date.asc().nullslast(), Task.created_at.desc())
-    stmt = _apply_task_filters(stmt, source=source, status_value=status_value, due_from=due_from, due_to=due_to)
+    stmt = _apply_task_filters(
+        stmt,
+        source=source,
+        status_value=status_value,
+        due_from=due_from,
+        due_to=due_to,
+        course_ids=course_ids,
+    )
     stmt = stmt.limit(limit).offset(offset)
     result = await session.execute(stmt)
     return list(result.scalars().all())
