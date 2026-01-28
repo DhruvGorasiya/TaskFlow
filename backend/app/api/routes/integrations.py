@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 
+from app.api.dependencies import DbSession
+from app.integrations.base import IntegrationAuthError, IntegrationRequestError
+from app.integrations.canvas.adapter import CanvasAdapter
+
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 
@@ -11,15 +15,14 @@ router = APIRouter(prefix="/integrations", tags=["integrations"])
     "/canvas/sync",
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def trigger_canvas_sync() -> dict[str, str]:
-    """Trigger a manual Canvas sync.
-
-    Note:
-    - The actual sync implementation will be wired in Step 4 (Canvas integration).
-    - For now this endpoint is a placeholder that confirms the API surface.
-    """
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="Canvas sync is not yet implemented.",
-    )
+async def trigger_canvas_sync(db: DbSession) -> dict[str, int]:
+    """Trigger a manual Canvas sync and upsert tasks into Postgres."""
+    try:
+        adapter = CanvasAdapter()
+        stats = await adapter.sync(db)
+        return stats
+    except IntegrationAuthError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+    except IntegrationRequestError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

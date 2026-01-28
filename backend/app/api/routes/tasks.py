@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Query, status
 
 from app.api.dependencies import DbSession
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
@@ -52,7 +50,7 @@ async def list_tasks_endpoint(
     status_code=status.HTTP_200_OK,
 )
 async def get_task_endpoint(
-    task_id: Annotated[uuid.UUID, Depends()],
+    task_id: uuid.UUID,
     db: DbSession,
 ) -> TaskRead:
     """Get a single task by ID."""
@@ -80,7 +78,7 @@ async def create_task_endpoint(
     status_code=status.HTTP_200_OK,
 )
 async def update_task_endpoint(
-    task_id: Annotated[uuid.UUID, Depends()],
+    task_id: uuid.UUID,
     payload: TaskUpdate,
     db: DbSession,
 ) -> TaskRead:
@@ -94,7 +92,7 @@ async def update_task_endpoint(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_task_endpoint(
-    task_id: Annotated[uuid.UUID, Depends()],
+    task_id: uuid.UUID,
     db: DbSession,
 ) -> None:
     """Delete a task by ID."""
