@@ -5,6 +5,7 @@ import type { Task } from "@/types";
 import { getCanvasCourses, getTasks, patchTask } from "@/lib/api";
 import type { CanvasCourse } from "@/lib/api";
 import type { TaskStatus } from "@/types";
+import { todayYYYYMMDD, toISOStartOfLocalDay } from "@/lib/utils";
 
 const AGENDA_COURSE_IDS_KEY = "taskflow_agenda_course_ids";
 
@@ -34,6 +35,8 @@ export interface UseAgendaResult {
   coursesError: string | null;
   selectedCourseIds: number[];
   setSelectedCourseIds: (ids: number[]) => void;
+  startDate: string;
+  setStartDate: (date: string) => void;
   tasks: Task[];
   isLoading: boolean;
   error: string | null;
@@ -46,6 +49,7 @@ export function useAgenda(): UseAgendaResult {
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [coursesError, setCoursesError] = useState<string | null>(null);
   const [selectedCourseIds, setSelectedCourseIdsState] = useState<number[]>([]);
+  const [startDate, setStartDate] = useState<string>(() => todayYYYYMMDD());
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +87,11 @@ export function useAgenda(): UseAgendaResult {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await getTasks({ course_ids: selectedCourseIds });
+      const due_from = toISOStartOfLocalDay(startDate);
+      const data = await getTasks({
+        course_ids: selectedCourseIds,
+        due_from,
+      });
       setTasks(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load tasks.");
@@ -91,7 +99,7 @@ export function useAgenda(): UseAgendaResult {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCourseIds]);
+  }, [selectedCourseIds, startDate]);
 
   useEffect(() => {
     void fetchCourses();
@@ -126,6 +134,8 @@ export function useAgenda(): UseAgendaResult {
     coursesError,
     selectedCourseIds,
     setSelectedCourseIds,
+    startDate,
+    setStartDate,
     tasks,
     isLoading,
     error,

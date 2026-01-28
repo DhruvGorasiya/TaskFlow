@@ -8,6 +8,7 @@ import {
   formatAgendaTime,
   formatDayHeader,
   dateKey,
+  todayYYYYMMDD,
 } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { triggerCanvasSync } from "@/lib/api";
@@ -21,6 +22,8 @@ export function AgendaView() {
     coursesError,
     selectedCourseIds,
     setSelectedCourseIds,
+    startDate,
+    setStartDate,
     tasks,
     isLoading,
     error,
@@ -32,7 +35,7 @@ export function AgendaView() {
   const todayKey = dateKey(new Date());
 
   const handleTodayClick = () => {
-    todayRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setStartDate(todayYYYYMMDD());
   };
 
   const toggleCourse = (id: number) => {
@@ -69,8 +72,8 @@ export function AgendaView() {
           Agenda
         </h1>
         <p className="mt-1 text-xs text-slate-400 md:text-sm">
-          Canvas-style view: select courses, then see tasks grouped by day.
-          Completed tasks show with a strikethrough.
+          Select courses and a start date. Tasks from that date onwards are
+          shown, grouped by day. Completed tasks show with a strikethrough.
         </p>
       </div>
 
@@ -132,9 +135,19 @@ export function AgendaView() {
         )}
       </section>
 
-      {/* Header: Today, date range, view */}
+      {/* Start date, Today, date range, view */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            <span>From date</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="rounded-md border border-slate-700 bg-slate-950/80 px-2 py-1.5 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+              aria-label="Show tasks from this date onwards"
+            />
+          </label>
           <Button variant="secondary" onClick={handleTodayClick}>
             Today
           </Button>
@@ -170,13 +183,13 @@ export function AgendaView() {
         <p className="text-sm text-slate-400">Loading tasks…</p>
       )}
 
-      {selectedCourseIds.length > 0 &&
+        {selectedCourseIds.length > 0 &&
         !isLoading &&
         !error &&
         sortedDays.length === 0 && (
           <p className="text-sm text-slate-400">
-            No tasks with due dates for the selected courses. Sync above or add
-            tasks elsewhere.
+            No tasks from {formatDayHeader(startDate)} onwards for the selected
+            courses. Sync above, choose an earlier date, or add tasks elsewhere.
           </p>
         )}
 
