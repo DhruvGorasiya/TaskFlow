@@ -47,9 +47,22 @@ class CanvasClient:
         """Validate token by fetching the current user."""
         return await self._get("/users/self")
 
-    async def list_courses(self, *, per_page: int = 50) -> list[CanvasCourse]:
-        """List courses for the authenticated user."""
-        raw = await self._get("/courses", params={"per_page": per_page})
+    async def list_courses(
+        self, *, per_page: int = 50, enrollment_state: str = "active"
+    ) -> list[CanvasCourse]:
+        """List courses for the authenticated user.
+        
+        Args:
+            per_page: Number of results per page.
+            enrollment_state: Filter by enrollment state. Options:
+                - "active" (default): Only current/ongoing courses
+                - "completed": Only finished courses
+                - "all": All courses regardless of state
+        """
+        params: dict[str, Any] = {"per_page": per_page}
+        if enrollment_state != "all":
+            params["enrollment_state"] = enrollment_state
+        raw = await self._get("/courses", params=params)
         return [CanvasCourse.model_validate(item) for item in raw]
 
     async def list_assignments(self, course_id: int, *, per_page: int = 50) -> list[CanvasAssignment]:

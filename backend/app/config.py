@@ -31,5 +31,9 @@ class Settings(BaseSettings):
     enable_scheduler: bool = False
     sync_interval_minutes: int = 15
 
+    # CORS: comma-separated list of allowed origins for the frontend.
+    # Example: "http://localhost:3000,https://taskflow.example.com"
+    cors_origins: str | None = None
+
 
 settings = Settings()  # type: ignore[call-arg]
