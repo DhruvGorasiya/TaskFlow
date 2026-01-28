@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.task import Task
 from app.schemas.task import TaskCreate
+from app.services.priority_service import (
+    prioritize_task,
+    should_recalculate_priority,
+)
+
+logger = logging.getLogger(__name__)
 
 
 async def upsert_tasks(
@@ -95,8 +102,91 @@ async def upsert_tasks(
     returned_ids = list(result.scalars().all())
     await session.commit()
 
+    # Prioritize tasks that were created/updated in this sync batch
+    prioritization_stats = await _prioritize_synced_tasks(session, returned_ids, tasks)
+
     return {
         "created": max(len(tasks) - existing_count, 0),
         "updated": existing_count,
         "total": len(tasks),
+        **prioritization_stats,
+    }
+
+
+async def _prioritize_synced_tasks(
+    session: AsyncSession,
+    task_ids: list[uuid.UUID],
+    synced_tasks: list[TaskCreate],
+) -> dict[str, int]:
+    """Prioritize tasks that were synced in this batch.
+
+    Returns stats: {prioritized: int, skipped: int, ai_used: int}
+    """
+    if not task_ids:
+        return {"prioritized": 0, "skipped": 0, "ai_used": 0}
+
+    # Fetch the actual Task objects from DB (after upsert, they have latest data)
+    stmt = select(Task).where(Task.id.in_(task_ids))
+    result = await session.execute(stmt)
+    db_tasks = list(result.scalars().all())
+
+    # Build a map of (source, external_id) -> TaskCreate to check if due_date changed
+    synced_map = {(t.source, t.external_id): t for t in synced_tasks}
+
+    prioritized = 0
+    skipped = 0
+    ai_used = 0
+
+    # Process each task
+    updates: list[tuple[uuid.UUID, str]] = []  # (task_id, priority)
+
+    for task in db_tasks:
+        # Get the synced task data to check if due_date changed
+        synced_task = synced_map.get((task.source, task.external_id))
+        new_due_date = synced_task.due_date if synced_task else task.due_date
+
+        # Check if we should recalculate priority
+        if not should_recalculate_priority(task, new_due_date):
+            skipped += 1
+            continue
+
+        # Calculate baseline for comparison
+        from app.services.priority_service import calculate_priority_baseline
+
+        baseline = calculate_priority_baseline(task.due_date, task.status)
+        if baseline is None:
+            skipped += 1
+            continue
+
+        # Calculate priority (with AI)
+        priority = await prioritize_task(task, use_ai=True)
+        if priority is None:
+            skipped += 1
+            continue
+
+        # Track if AI adjusted from baseline
+        from app.config import settings
+
+        if settings.openai_api_key and priority != baseline:
+            ai_used += 1
+
+        updates.append((task.id, priority))
+        prioritized += 1
+
+    # Batch update priorities
+    if updates:
+        for task_id, priority in updates:
+            stmt_update = (
+                update(Task).where(Task.id == task_id).values(priority=priority)
+            )
+            await session.execute(stmt_update)
+        await session.commit()
+        logger.info(
+            f"Prioritized {prioritized} tasks ({ai_used} AI-adjusted, {skipped} skipped)"
+        )
+
+    return {
+        "prioritized": prioritized,
+        "skipped": skipped,
+        "ai_used": ai_used,
     }

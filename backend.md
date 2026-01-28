@@ -59,7 +59,8 @@ backend/
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── task_service.py  # CRUD + list_tasks with filters (incl. course_ids)
-│   │   └── sync_service.py  # upsert_tasks by (source, external_id), sync stats
+│   │   ├── sync_service.py  # upsert_tasks by (source, external_id), sync stats
+│   │   └── priority_service.py  # AI-powered task prioritization (date rules + OpenAI)
 │   ├── integrations/
 │   │   ├── __init__.py
 │   │   ├── base.py          # IntegrationBase ABC, IntegrationError / Auth / Request
@@ -106,6 +107,7 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 | `canvas_api_token` | `str \| None` | `None` | Canvas API token. Required for Canvas. |
 | `notion_api_token` | `str \| None` | `None` | Notion integration token. Required for Notion push. |
 | `notion_database_id` | `str \| None` | `None` | Notion database ID. Required for Notion push. |
+| `openai_api_key` | `str \| None` | `None` | OpenAI API key. Optional: enables AI-powered task prioritization. |
 | `enable_scheduler` | `bool` | `False` | If `True`, start APScheduler on app startup |
 | `sync_interval_minutes` | `int` | `15` | Canvas sync interval when scheduler enabled |
 | `cors_origins` | `str \| None` | `None` | Comma-separated allowed origins. If unset, `http://localhost:3000` and `http://127.0.0.1:3000` |
@@ -171,6 +173,7 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 | `POST` | `/api/tasks` | Create task (body: `TaskCreate`) |
 | `PATCH` | `/api/tasks/{task_id}` | Update task (body: `TaskUpdate`, partial) |
 | `DELETE` | `/api/tasks/{task_id}` | Delete task |
+| `POST` | `/api/tasks/prioritize` | Prioritize tasks using AI. Optional body: `{ "task_ids": [...] }` or `{ "course_ids": [...] }`. Returns `{ prioritized, skipped, ai_used }`. 200 OK. |
 
 **List query parameters:**
 
@@ -214,8 +217,16 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 
 - **`upsert_tasks(session, tasks: list[TaskCreate])`:** Upserts by `(source, external_id)` using PostgreSQL `INSERT ... ON CONFLICT (uq_tasks_source_external_id) DO UPDATE`.
 - **On conflict**, overwrites: `source_metadata`, `title`, `description`, `due_date`, `course_or_category`, `synced_at`, **`status`** (from provider, e.g. Canvas submission). **`priority`** is **not** overwritten (user-owned).
-- **Returns:** `{ created, updated, total }` (best-effort from pre-check of existing `(source, external_id)`).
+- **After upsert**, automatically prioritizes tasks that were created/updated using `priority_service.prioritize_task()`.
+- **Returns:** `{ created, updated, total, prioritized, skipped, ai_used }` (best-effort from pre-check of existing `(source, external_id)`).
 - New rows use `uuid.uuid4()` for `id`.
+
+### 7.3 Priority Service (`app.services.priority_service`)
+
+- **`calculate_priority_baseline(due_date, status)`:** Date-based priority rules: `< 7 days` → `high`, `7-14 days` → `medium`, `> 14 days` → `low`. Returns `None` if task is completed/archived or has no due_date.
+- **`analyze_with_ai(title, description, baseline, due_date)`:** Calls OpenAI API (`gpt-4o-mini`) to analyze task content and adjust priority. Falls back to baseline on API failure or missing key.
+- **`should_recalculate_priority(task, new_due_date)`:** Returns `True` if priority is `none`, deadline changed significantly (>3 days), or task gained a due_date.
+- **`prioritize_task(task, use_ai=True)`:** Main entry point: checks recalculation logic, computes baseline, optionally calls AI, returns priority or `None` (skip).
 
 ---
 
@@ -356,6 +367,7 @@ pytest -q
 - **Canvas completion:** Driven by `include[]=submission` and `submitted_at`. No per-assignment submission API or `/users/self` required for sync.
 - **Course filtering:** `course_ids` on `GET /api/tasks` filters Canvas tasks by `source_metadata.course.id`. Used by the Agenda UI for “selected courses” views.
 - **Date filtering:** `due_from` / `due_to` support agenda “from date onwards” and other range queries. Send ISO datetimes; backend uses `DateTime(timezone=True)`.
+- **AI prioritization:** Tasks are automatically prioritized during sync using date-based rules + OpenAI content analysis. Manual prioritization via `POST /api/tasks/prioritize`. Falls back to baseline if OpenAI API fails or key is missing.
 
 ---
 
@@ -372,6 +384,7 @@ pytest -q
 | Canvas & Notion integrations API | `app/api/routes/integrations.py` |
 | Task business logic | `app/services/task_service.py` |
 | Sync upsert | `app/services/sync_service.py` |
+| AI prioritization | `app/services/priority_service.py` |
 | Integration contract | `app/integrations/base.py` |
 | Canvas API client | `app/integrations/canvas/client.py` |
 | Canvas sync logic | `app/integrations/canvas/adapter.py` |

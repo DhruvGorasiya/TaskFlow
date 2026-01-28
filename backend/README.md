@@ -86,6 +86,7 @@ Notes:
 - `canvas_api_token: str | None`
 - `notion_api_token: str | None`
 - `notion_database_id: str | None`
+- `openai_api_key: str | None` - Optional: for AI-powered task prioritization
 - `enable_scheduler: bool` (default `False`)
 - `sync_interval_minutes: int` (default `15`)
 
@@ -182,6 +183,7 @@ Endpoints:
   - `POST /api/tasks`
   - `PATCH /api/tasks/{id}`
   - `DELETE /api/tasks/{id}`
+  - `POST /api/tasks/prioritize` - AI-powered task prioritization
 - Integrations:
   - `GET /api/integrations/canvas/courses`
   - `POST /api/integrations/canvas/sync`
@@ -292,6 +294,88 @@ Notes:
 
 - If `task_ids` is provided, it takes precedence over `course_ids`.
 - When `course_ids` is provided, only Canvas tasks with status `pending` or `completed` are pushed (archived tasks are skipped).
+
+## 10. AI-Powered Task Prioritization
+
+TaskFlow can automatically prioritize tasks using a hybrid approach: date-based rules as baseline, with OpenAI analyzing task content to adjust priority based on urgency signals.
+
+### Setup
+
+1. Get an OpenAI API key from [platform.openai.com](https://platform.openai.com/api-keys).
+2. Add to `env.local.txt`:
+
+   ```text
+   OPENAI_API_KEY=sk-...
+   ```
+
+### How It Works
+
+**Baseline Priority (date-based):**
+- **High**: Due date < 7 days away
+- **Medium**: Due date 7-14 days away
+- **Low**: Due date > 14 days away
+
+**AI Adjustment:**
+- OpenAI analyzes task title and description to detect urgency signals
+- Examples: "final exam" → may boost to high even if >1 week away
+- "optional reading" → may reduce to low even if deadline is near
+
+**Smart Recalculation:**
+- Priority is recalculated if:
+  - Task priority is `none`, OR
+  - Deadline changed significantly (>3 days), OR
+  - Task previously had no due_date and now has one
+- User-set priorities (`priority != "none"`) are preserved unless deadline changed significantly
+
+### Automatic Prioritization
+
+Tasks are automatically prioritized during Canvas sync. The sync response includes prioritization stats:
+
+```json
+{
+  "created": 10,
+  "updated": 5,
+  "total": 15,
+  "prioritized": 12,
+  "skipped": 3,
+  "ai_used": 8
+}
+```
+
+### Manual Prioritization API
+
+```bash
+# Prioritize all pending tasks
+curl -X POST http://localhost:8000/api/tasks/prioritize
+
+# Prioritize specific tasks
+curl -X POST http://localhost:8000/api/tasks/prioritize \
+  -H "Content-Type: application/json" \
+  -d '{"task_ids": ["uuid-1", "uuid-2"]}'
+
+# Prioritize Canvas tasks from specific courses
+curl -X POST http://localhost:8000/api/tasks/prioritize \
+  -H "Content-Type: application/json" \
+  -d '{"course_ids": [1, 2, 3]}'
+```
+
+Response:
+
+```json
+{
+  "prioritized": 15,
+  "skipped": 5,
+  "ai_used": 10
+}
+```
+
+### Notes
+
+- If `OPENAI_API_KEY` is not set, prioritization falls back to date-based rules only
+- OpenAI API failures/timeouts fall back to baseline priority (logged as warnings)
+- Uses `gpt-4o-mini` model for cost efficiency
+- Only pending tasks are prioritized (completed/archived are skipped)
+- Tasks without `due_date` are skipped
 
 ## 10. Running tests
 

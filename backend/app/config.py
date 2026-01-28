@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     notion_api_token: str | None = None
     notion_database_id: str | None = None
 
+    # Optional until you enable AI-powered task prioritization.
+    openai_api_key: str | None = None
+
     enable_scheduler: bool = False
     sync_interval_minutes: int = 15
 
