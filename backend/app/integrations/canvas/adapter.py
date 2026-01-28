@@ -41,7 +41,9 @@ class CanvasAdapter(IntegrationBase):
         courses = await self._client.list_courses()
         return [CanvasCourseListItem(id=c.id, name=c.name) for c in courses]
 
-    async def fetch_tasks(self, course_ids: list[int] | None = None) -> list[TaskCreate]:
+    async def fetch_tasks(
+        self, course_ids: list[int] | None = None
+    ) -> list[TaskCreate]:
         """Fetch Canvas courses + assignments and normalize into TaskCreate.
 
         If course_ids is provided, only those courses are fetched. Otherwise all
@@ -59,10 +61,18 @@ class CanvasAdapter(IntegrationBase):
         tasks: list[TaskCreate] = []
         for course in courses:
             try:
-                assignments = await self._client.list_assignments(course.id)
+                assignments = await self._client.list_assignments(
+                    course.id, include_submission=True
+                )
             except IntegrationAuthError:
                 continue
             for assignment in assignments:
+                sub = assignment.submission
+                status = (
+                    "completed"
+                    if sub is not None and sub.get("submitted_at") is not None
+                    else "pending"
+                )
                 assignment_data = assignment.model_dump(mode="json")
                 assignment_data["course"] = {"id": course.id, "name": course.name}
 
@@ -75,7 +85,7 @@ class CanvasAdapter(IntegrationBase):
                         "description": assignment.description,
                         "due_date": assignment.due_at,
                         "priority": "none",
-                        "status": "pending",
+                        "status": status,
                         "course_or_category": course.name,
                     }
                 )

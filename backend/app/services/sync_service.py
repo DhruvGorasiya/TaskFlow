@@ -18,8 +18,8 @@ async def upsert_tasks(session: AsyncSession, tasks: list[TaskCreate]) -> dict[s
 
     Notes:
     - Provider-owned fields are overwritten on sync: title, description, due_date,
-      course_or_category, source_metadata.
-    - User-owned fields are preserved on sync: status, priority.
+      course_or_category, source_metadata, status (from provider, e.g. Canvas submission).
+    - User-owned fields preserved on sync: priority.
     """
     if not tasks:
         return {"created": 0, "updated": 0, "total": 0}
@@ -61,7 +61,7 @@ async def upsert_tasks(session: AsyncSession, tasks: list[TaskCreate]) -> dict[s
 
     stmt = insert(Task).values(rows)
 
-    # Only overwrite provider-owned fields on conflict.
+    # Only overwrite provider-owned fields on conflict (including status from Canvas).
     update_cols = {
         "source_metadata": stmt.excluded.source_metadata,
         "title": stmt.excluded.title,
@@ -69,6 +69,7 @@ async def upsert_tasks(session: AsyncSession, tasks: list[TaskCreate]) -> dict[s
         "due_date": stmt.excluded.due_date,
         "course_or_category": stmt.excluded.course_or_category,
         "synced_at": stmt.excluded.synced_at,
+        "status": stmt.excluded.status,
     }
 
     stmt = stmt.on_conflict_do_update(

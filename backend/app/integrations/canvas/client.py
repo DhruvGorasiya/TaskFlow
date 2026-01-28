@@ -73,8 +73,21 @@ class CanvasClient:
         except (IntegrationAuthError, IntegrationRequestError):
             return None
 
-    async def list_assignments(self, course_id: int, *, per_page: int = 50) -> list[CanvasAssignment]:
-        """List assignments for a course."""
-        raw = await self._get(f"/courses/{course_id}/assignments", params={"per_page": per_page})
+    async def list_assignments(
+        self,
+        course_id: int,
+        *,
+        per_page: int = 50,
+        include_submission: bool = False,
+    ) -> list[CanvasAssignment]:
+        """List assignments for a course.
+
+        When include_submission=True, adds include[]=submission so each assignment
+        includes the current user's submission (submitted_at → completed).
+        """
+        params: dict[str, Any] = {"per_page": per_page}
+        if include_submission:
+            params["include[]"] = "submission"
+        raw = await self._get(f"/courses/{course_id}/assignments", params=params)
         return [CanvasAssignment.model_validate(item) for item in raw]
 

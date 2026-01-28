@@ -46,4 +46,6 @@ class CanvasAssignment(BaseModel):
 
     # Allow attaching course context during normalization.
     course: dict[str, Any] | None = None
+    # Present when include[]=submission: current user's submission (submitted_at → completed).
+    submission: dict[str, Any] | None = None
 

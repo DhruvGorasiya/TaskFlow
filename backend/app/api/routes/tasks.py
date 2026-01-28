@@ -20,15 +20,24 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 )
 async def list_tasks_endpoint(
     db: DbSession,
-    source: str | None = Query(default=None, description="Filter by source (e.g. 'canvas')"),
+    source: str | None = Query(
+        default=None, description="Filter by source (e.g. 'canvas')"
+    ),
     status_value: str | None = Query(
         default=None,
         alias="status",
         description="Filter by task status (pending|completed|archived)",
     ),
-    due_from: datetime | None = Query(default=None, description="Filter tasks due on/after this datetime"),
-    due_to: datetime | None = Query(default=None, description="Filter tasks due on/before this datetime"),
-    course_ids: list[int] = Query(default=[], description="Filter Canvas tasks by course IDs (e.g. ?course_ids=1&course_ids=2)"),
+    due_from: datetime | None = Query(
+        default=None, description="Filter tasks due on/after this datetime"
+    ),
+    due_to: datetime | None = Query(
+        default=None, description="Filter tasks due on/before this datetime"
+    ),
+    course_ids: list[int] = Query(
+        default=[],
+        description="Filter Canvas tasks by course IDs (e.g. ?course_ids=1&course_ids=2)",
+    ),
     limit: int = Query(default=200, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[TaskRead]:
@@ -100,4 +109,3 @@ async def delete_task_endpoint(
 ) -> None:
     """Delete a task by ID."""
     await task_service.delete_task(db, task_id)
-
