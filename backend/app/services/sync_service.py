@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,8 +26,24 @@ async def upsert_tasks(session: AsyncSession, tasks: list[TaskCreate]) -> dict[s
 
     now = datetime.now(tz=timezone.utc)
 
+    # Best-effort created vs updated stats: pre-check which keys already exist.
+    # This keeps our returned stats meaningful without needing triggers/CTEs.
+    existing_count = 0
+    by_source: dict[str, list[str]] = {}
+    for t in tasks:
+        by_source.setdefault(t.source, []).append(t.external_id)
+
+    for source, external_ids in by_source.items():
+        stmt_existing = select(Task.external_id).where(
+            Task.source == source,
+            Task.external_id.in_(external_ids),
+        )
+        res = await session.execute(stmt_existing)
+        existing_count += len(list(res.scalars().all()))
+
     rows = [
         {
+            "id": uuid.uuid4(),
             "external_id": t.external_id,
             "source": t.source,
             "source_metadata": t.source_metadata,
@@ -62,12 +80,9 @@ async def upsert_tasks(session: AsyncSession, tasks: list[TaskCreate]) -> dict[s
     returned_ids = list(result.scalars().all())
     await session.commit()
 
-    # We don't get per-row info on create vs update from RETURNING alone.
-    # For MVP, report total affected and leave created/updated as best-effort.
-    # (We can refine later by checking existing keys before upsert.)
     return {
-        "created": 0,
-        "updated": len(returned_ids),
+        "created": max(len(tasks) - existing_count, 0),
+        "updated": existing_count,
         "total": len(tasks),
     }
 
