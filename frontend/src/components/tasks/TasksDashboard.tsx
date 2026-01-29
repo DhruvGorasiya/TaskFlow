@@ -19,11 +19,19 @@ export function TasksDashboard() {
   useEffect(() => {
     const stored = loadSelectedCourseIds();
     setSelectedCourseIds(stored);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/7cba70ce-b46b-404a-8c4b-820a762188e6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/components/tasks/TasksDashboard.tsx:useEffect:init',message:'Dashboard mounted; loaded selected course IDs',data:{storedCount:stored.length,storedIds:stored.slice().sort((a,b)=>a-b)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    fetch('/api/__debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/components/tasks/TasksDashboard.tsx:useEffect:init',message:'Dashboard mounted; loaded selected course IDs (relay)',data:{storedCount:stored.length,storedIds:stored.slice().sort((a,b)=>a-b)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
     
     // Listen for storage changes (when Settings updates course selection)
     const handleStorageChange = () => {
       const updated = loadSelectedCourseIds();
       setSelectedCourseIds(updated);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/7cba70ce-b46b-404a-8c4b-820a762188e6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/components/tasks/TasksDashboard.tsx:handleStorageChange',message:'Dashboard observed course selection change',data:{updatedCount:updated.length,updatedIds:updated.slice().sort((a,b)=>a-b)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+      fetch('/api/__debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/components/tasks/TasksDashboard.tsx:handleStorageChange',message:'Dashboard observed course selection change (relay)',data:{updatedCount:updated.length,updatedIds:updated.slice().sort((a,b)=>a-b)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
     };
     window.addEventListener("storage", handleStorageChange);
     

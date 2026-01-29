@@ -45,6 +45,11 @@ export function useTasks(
         if (filters.source !== "all") params.source = filters.source;
         if (filters.status !== "all") params.status = filters.status;
       }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/7cba70ce-b46b-404a-8c4b-820a762188e6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/hooks/useTasks.ts:fetchTasks',message:'Fetching tasks',data:{hasCourseFilter:Boolean(courseIds && courseIds.length>0),courseIds:courseIds ?? null,params},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+      fetch('/api/__debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/hooks/useTasks.ts:fetchTasks',message:'Fetching tasks (relay)',data:{hasCourseFilter:Boolean(courseIds && courseIds.length>0),courseIds:courseIds ?? null,params},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       
       const data = await getTasks(params);
 

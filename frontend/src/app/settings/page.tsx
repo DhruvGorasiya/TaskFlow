@@ -54,6 +54,10 @@ export default function SettingsPage() {
       : [...selectedCourseIds, id];
     setSelectedCourseIds(next);
     storeSelectedCourseIds(next);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/7cba70ce-b46b-404a-8c4b-820a762188e6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/app/settings/page.tsx:handleCourseToggle',message:'User toggled course selection',data:{toggledId:id,nextIdsCount:next.length,nextIds:next.slice().sort((a,b)=>a-b)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+    fetch('/api/__debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/app/settings/page.tsx:handleCourseToggle',message:'User toggled course selection (relay)',data:{toggledId:id,nextIdsCount:next.length,nextIds:next.slice().sort((a,b)=>a-b)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
     // Dispatch custom event for same-tab updates
     window.dispatchEvent(new Event("courseSelectionChanged"));
   };
