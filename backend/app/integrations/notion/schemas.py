@@ -17,6 +17,7 @@ class NotionSyncResponse(BaseModel):
 
     created: int
     updated: int
+    archived: int
     failed: int
     total: int
 

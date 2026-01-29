@@ -171,25 +171,60 @@ class NotionAdapter:
     ) -> dict[str, int]:
         """Push tasks to Notion. Create or update pages; store notion_page_id on tasks.
 
-        If task_ids is provided, only those tasks are synced.
+        Completed tasks are not kept in Notion: any existing Notion page for a
+        completed task is archived (removed from the database view and calendar),
+        and completed tasks are never created or updated.
+
+        If task_ids is provided, only those tasks are considered (excluding completed).
         Otherwise, if course_ids is provided, only Canvas tasks from those courses
-        with status in (pending, completed) are synced.
-        Otherwise all tasks (up to limit) are synced.
+        with status pending or archived are synced.
+        Otherwise all non-completed tasks (up to limit) are synced.
         """
+        # 1. Archive Notion pages for tasks that are now completed (so they disappear from Notion/calendar).
+        archive_stmt = select(Task).where(
+            Task.notion_page_id.is_not(None),
+            Task.status == "completed",
+        )
+        archive_result = await session.execute(archive_stmt)
+        to_archive = list(archive_result.scalars().all())
+        archived = 0
+        for task in to_archive:
+            try:
+                await self._client.archive_page(task.notion_page_id)
+                task.notion_page_id = None
+                archived += 1
+            except IntegrationAuthError:
+                raise
+            except IntegrationRequestError as exc:
+                msg = str(exc).lower()
+                # Page may already be archived (e.g. in Notion UI); clear our ref and continue.
+                if "archived" in msg and ("can't edit" in msg or "cannot edit" in msg):
+                    task.notion_page_id = None
+                    archived += 1
+                else:
+                    raise
+            except Exception:
+                pass  # count as failed for this page; continue with others
+        if archived:
+            await session.commit()
+
+        # 2. Build list of non-completed tasks to push (create or update).
+        non_completed = Task.status.in_(["pending", "archived"])
         if task_ids is not None:
-            stmt: Select[tuple[Task]] = select(Task).where(Task.id.in_(task_ids))
+            stmt = select(Task).where(Task.id.in_(task_ids)).where(non_completed)
         elif course_ids:
             stmt = (
                 select(Task)
                 .where(Task.source == "canvas")
                 .where(_course_id_expr().in_(course_ids))
-                .where(Task.status.in_(["pending", "completed"]))
+                .where(non_completed)
                 .order_by(Task.due_date.asc().nullslast(), Task.created_at.desc())
                 .limit(limit)
             )
         else:
             stmt = (
                 select(Task)
+                .where(non_completed)
                 .order_by(Task.due_date.asc().nullslast(), Task.created_at.desc())
                 .limit(limit)
             )
@@ -208,10 +243,10 @@ class NotionAdapter:
                         await self._client.update_page(task.notion_page_id, props)
                         updated += 1
                     except IntegrationRequestError as exc:
-                        # If the page was archived in Notion, unarchive and retry.
-                        # Notion returns: "Can't edit block that is archived..."
                         msg = str(exc).lower()
-                        if "archived" in msg and "can't edit block" in msg:
+                        if "archived" in msg and (
+                            "can't edit" in msg or "cannot edit" in msg
+                        ):
                             await self._client.unarchive_page(task.notion_page_id)
                             await self._client.update_page(task.notion_page_id, props)
                             updated += 1
@@ -232,6 +267,7 @@ class NotionAdapter:
         return {
             "created": created,
             "updated": updated,
+            "archived": archived,
             "failed": failed,
             "total": len(tasks),
         }

@@ -269,7 +269,7 @@ TaskFlow can **push** tasks to a Notion database so they appear as pages there. 
 # Push all tasks (up to 500)
 curl -X POST http://localhost:8000/api/integrations/notion/sync
 
-# Push tasks for selected Canvas courses (pending + completed only)
+# Push tasks for selected Canvas courses (pending and archived only; completed are not in Notion)
 curl -X POST http://localhost:8000/api/integrations/notion/sync \
   -H "Content-Type: application/json" \
   -d '{"course_ids": [1, 2, 3]}'
@@ -283,17 +283,21 @@ curl -X POST http://localhost:8000/api/integrations/notion/sync \
 Response:
 
 ```json
-{"created": 5, "updated": 2, "failed": 0, "total": 7}
+{"created": 5, "updated": 2, "archived": 1, "failed": 0, "total": 7}
 ```
 
-- Tasks without `notion_page_id` → new Notion pages are created and the ID is stored.
-- Tasks with `notion_page_id` → existing Notion pages are updated.
+- **Completed tasks are not kept in Notion.** Any existing Notion page for a completed task is archived (removed from the database and Notion Calendar).
+- Only **pending** and **archived** tasks are pushed: new pages are created or existing pages updated.
 - All TaskFlow fields (title, description, due date, priority, status, course/source) are synced to the matching Notion properties.
 
 Notes:
 
 - If `task_ids` is provided, it takes precedence over `course_ids`.
-- When `course_ids` is provided, only Canvas tasks with status `pending` or `completed` are pushed (archived tasks are skipped).
+- When `course_ids` is provided, only Canvas tasks with status `pending` or `archived` are pushed (completed tasks are not in Notion).
+
+### Notion Calendar
+
+TaskFlow pushes only non-completed tasks to one Notion database (`NOTION_DATABASE_ID`). To see those tasks in **Notion Calendar** (calendar.notion.so or the desktop app), connect Notion Calendar to that same database in its settings. Tasks appear on the calendar by **Due Date**. Completed tasks are not in the database, so they do not appear in Notion Calendar
 
 ## 10. AI-Powered Task Prioritization
 
