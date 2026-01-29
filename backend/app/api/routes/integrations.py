@@ -11,7 +11,12 @@ from app.integrations.base import IntegrationAuthError, IntegrationRequestError
 from app.integrations.canvas.adapter import CanvasAdapter
 from app.integrations.canvas.schemas import CanvasCourseListItem, CanvasSyncRequest
 from app.integrations.notion.adapter import NotionAdapter
-from app.integrations.notion.schemas import NotionSyncRequest, NotionSyncResponse
+from app.integrations.notion.schemas import (
+    NotionPullRequest,
+    NotionPullResponse,
+    NotionSyncRequest,
+    NotionSyncResponse,
+)
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
@@ -97,6 +102,50 @@ async def trigger_notion_sync(
         await adapter.authenticate()
         stats = await adapter.push(db, task_ids=task_ids, course_ids=course_ids)
         return NotionSyncResponse(**stats)
+    except IntegrationAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
+        ) from exc
+    except IntegrationRequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+
+
+@router.post(
+    "/notion/pull",
+    response_model=NotionPullResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def trigger_notion_pull(
+    db: DbSession,
+    payload: NotionPullRequest | None = Body(default=None),
+) -> NotionPullResponse:
+    """Pull status updates from Notion pages back to TaskFlow tasks.
+
+    When you mark a task as completed in Notion (by changing Status property),
+    this endpoint syncs that status change back to TaskFlow.
+
+    Optional body: { "task_ids": ["uuid1", "uuid2", ...] }. If provided, only
+    those tasks are synced; otherwise all tasks with notion_page_id are synced.
+
+    Returns: { updated, skipped, failed, total }
+    """
+    task_ids: list[uuid.UUID] | None = None
+    if payload and payload.task_ids:
+        try:
+            task_ids = [uuid.UUID(tid) for tid in payload.task_ids]
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid task_id in task_ids",
+            ) from exc
+
+    try:
+        adapter = NotionAdapter()
+        await adapter.authenticate()
+        stats = await adapter.pull_status_updates(db, task_ids=task_ids)
+        return NotionPullResponse(**stats)
     except IntegrationAuthError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)

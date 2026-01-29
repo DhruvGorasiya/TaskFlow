@@ -58,12 +58,21 @@ class NotionClient:
             if not detail:
                 try:
                     detail = exc.response.text
+                    # If we got HTML (like Cloudflare error pages), extract a cleaner message
+                    if detail and "<!DOCTYPE html>" in detail or "<html" in detail:
+                        # Try to extract title or error message from HTML
+                        import re
+                        title_match = re.search(r"<title>(.*?)</title>", detail, re.IGNORECASE)
+                        if title_match:
+                            detail = title_match.group(1).strip()
+                        else:
+                            detail = f"Notion API returned HTML error page (status {status_code})"
                 except Exception:
                     detail = None
 
             msg = (
                 f"Notion request failed ({status_code})"
-                + (f": {detail}" if detail else "")
+                + (f": {detail[:200]}" if detail else "")  # Truncate long error messages
             )
             raise IntegrationRequestError(msg) from exc
         except httpx.HTTPError as exc:
@@ -74,6 +83,27 @@ class NotionClient:
     async def get_database(self) -> dict[str, Any]:
         """Fetch database (validates token + database_id)."""
         return await self._request("GET", f"/v1/databases/{self._database_id}")
+
+    async def get_page(self, page_id: str) -> dict[str, Any]:
+        """Fetch a single page by ID."""
+        return await self._request("GET", f"/v1/pages/{page_id.strip()}")
+
+    async def query_database(
+        self,
+        *,
+        filter: dict[str, Any] | None = None,
+        sorts: list[dict[str, Any]] | None = None,
+        page_size: int = 100,
+    ) -> dict[str, Any]:
+        """Query pages in the database."""
+        payload: dict[str, Any] = {"page_size": page_size}
+        if filter:
+            payload["filter"] = filter
+        if sorts:
+            payload["sorts"] = sorts
+        return await self._request(
+            "POST", f"/v1/databases/{self._database_id}/query", json=payload
+        )
 
     async def create_page(self, properties: dict[str, Any]) -> dict[str, Any]:
         """Create a page in the configured database."""

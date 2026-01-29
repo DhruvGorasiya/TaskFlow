@@ -10,6 +10,7 @@ This document describes **everything implemented** in the TaskFlow backend: stru
 
 - Exposes a **unified Task API** (CRUD) backed by **PostgreSQL**.
 - Integrates with **Canvas LMS**: fetch courses, sync assignments as tasks, and reflect **completion status** from Canvas submissions.
+- Integrates with **Notion**: **push** tasks to a Notion database and **pull** status updates (e.g. completed in Notion) back into TaskFlow.
 - Supports **course-based filtering** (list tasks by selected Canvas courses) and **date filtering** (`due_from` / `due_to`).
 - Optionally runs a **background scheduler** to sync Canvas on an interval.
 
@@ -49,7 +50,7 @@ backend/
 │   │   └── routes/
 │   │       ├── __init__.py  # api_router, includes tasks + integrations
 │   │       ├── tasks.py     # Task CRUD + list filters (source, status, due_from/to, course_ids)
-│   │       └── integrations.py  # GET /canvas/courses, POST /canvas/sync
+│   │       └── integrations.py  # Canvas: courses, sync; Notion: sync (push), pull (status)
 │   ├── models/
 │   │   ├── __init__.py
 │   │   └── task.py          # Task SQLAlchemy model (UUID, enums, JSONB, indexes)
@@ -64,11 +65,16 @@ backend/
 │   ├── integrations/
 │   │   ├── __init__.py
 │   │   ├── base.py          # IntegrationBase ABC, IntegrationError / Auth / Request
-│   │   └── canvas/
+│   │   ├── canvas/
+│   │   │   ├── __init__.py
+│   │   │   ├── client.py    # Canvas API client (courses, assignments, include submission)
+│   │   │   ├── adapter.py   # CanvasAdapter: auth, list_courses, fetch_tasks, sync
+│   │   │   └── schemas.py   # CanvasCourse, CanvasCourseListItem, CanvasSyncRequest, CanvasAssignment
+│   │   └── notion/
 │   │       ├── __init__.py
-│   │       ├── client.py    # Canvas API client (courses, assignments, include submission)
-│   │       ├── adapter.py   # CanvasAdapter: auth, list_courses, fetch_tasks, sync
-│   │       └── schemas.py   # CanvasCourse, CanvasCourseListItem, CanvasSyncRequest, CanvasAssignment
+│   │       ├── client.py    # Notion API client (get_database, get_page, create/update/archive/unarchive_page, query_database)
+│   │       ├── adapter.py   # NotionAdapter: push tasks to Notion, pull_status_updates from Notion
+│   │       └── schemas.py   # NotionSyncRequest/Response, NotionPullRequest/Response
 │   └── jobs/
 │       ├── __init__.py
 │       └── sync_scheduler.py  # APScheduler: run_canvas_sync_once, start/stop
@@ -76,7 +82,8 @@ backend/
 │   ├── env.py               # Async Alembic env, uses settings.database_url
 │   ├── script.py.mako
 │   └── versions/
-│       └── 20260128_0001_create_tasks_table.py  # tasks table, enums, indexes, unique constraint
+│       ├── 20260128_0001_create_tasks_table.py  # tasks table, enums, indexes, unique constraint
+│       └── 20260128_0002_add_notion_page_id_to_tasks.py  # notion_page_id column
 ├── tests/                   # pytest tests (when present)
 ├── alembic.ini
 ├── docker-compose.yml       # Postgres 15, taskflow DB, persistent volume
@@ -173,7 +180,7 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 | `POST` | `/api/tasks` | Create task (body: `TaskCreate`) |
 | `PATCH` | `/api/tasks/{task_id}` | Update task (body: `TaskUpdate`, partial) |
 | `DELETE` | `/api/tasks/{task_id}` | Delete task |
-| `POST` | `/api/tasks/prioritize` | Prioritize tasks using AI. Optional body: `{ "task_ids": [...] }` or `{ "course_ids": [...] }`. Returns `{ prioritized, skipped, ai_used }`. 200 OK. |
+| `POST` | `/api/tasks/prioritize` | Prioritize tasks using AI. Optional body: `{ "task_ids": [...] }`, `{ "course_ids": [...] }`, or no body (prioritize all pending tasks). Returns `{ prioritized, skipped, ai_used }`. 200 OK. |
 
 **List query parameters:**
 
@@ -194,8 +201,9 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/integrations/canvas/courses` | List active Canvas courses for UI toggles. Returns `[{ id, name }]`. 401 if auth fails, 502 on request errors. |
-| `POST` | `/api/integrations/canvas/sync` | Trigger Canvas sync. Optional body: `{ "course_ids": [1, 2, 3] }`. If present, only those courses are synced; otherwise all active courses. Returns `{ created, updated, total }`. 200 OK. 401 auth error, 502 request error. |
+| `POST` | `/api/integrations/canvas/sync` | Trigger Canvas sync. Optional body: `{ "course_ids": [1, 2, 3] }`. If present, only those courses are synced; otherwise all active courses. Returns `{ created, updated, total, prioritized, skipped, ai_used }`. 200 OK. 401 auth error, 502 request error. |
 | `POST` | `/api/integrations/notion/sync` | Push tasks to Notion. Optional body: `{ "task_ids": ["uuid", ...] }` (takes precedence), or `{ "course_ids": [1, 2, 3] }` (Canvas only; pushes pending+completed). If no body provided, pushes all (up to 500). Returns `{ created, updated, failed, total }`. 200 OK. 401/502 on auth/request errors. |
+| `POST` | `/api/integrations/notion/pull` | Pull status updates from Notion into TaskFlow. When Status is changed in Notion (e.g. completed), this syncs it back. Optional body: `{ "task_ids": ["uuid", ...] }`; if omitted, syncs all tasks with `notion_page_id`. Returns `{ updated, skipped, failed, total }`. 200 OK. 401/502 on auth/request errors. |
 
 ### 6.4 Dependencies
 
@@ -268,13 +276,15 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 - **`CanvasSyncRequest`:** Optional `course_ids: list[int] | None` for `POST /canvas/sync` body.
 - **`CanvasAssignment`:** `id`, `name`, `description`, `due_at`, `course`, `submission` (optional; when `include[]=submission`).
 
-### 8.5 Notion (push to Notion)
+### 8.5 Notion (push to Notion, pull status from Notion)
 
-- **Direction:** TaskFlow **pushes** tasks to a Notion database (destination). Opposite of Canvas (source).
+- **Direction:** TaskFlow **pushes** tasks to a Notion database (destination) and can **pull** status changes from Notion back into TaskFlow.
 - **Config:** `NOTION_API_TOKEN`, `NOTION_DATABASE_ID`. Database must have properties: **Name** (title), **Description** (rich_text), **Due Date** (date), **Priority** (select: high|medium|low|none), **Status** (select: pending|completed|archived), **Course** (rich_text), **Source** (rich_text).
-- **`NotionClient`** (`app.integrations.notion.client`): `get_database`, `create_page`, `update_page`, `archive_page`. Uses Notion API `2022-06-28`.
-- **`NotionAdapter`** (`app.integrations.notion.adapter`): `authenticate()`, `push(session, task_ids=None, limit=500)`. Maps `Task` → Notion properties; creates pages for tasks without `notion_page_id`, updates otherwise; stores `notion_page_id` on tasks.
-- **`Task`** model has nullable `notion_page_id`; **`TaskRead`** exposes it.
+- **`NotionClient`** (`app.integrations.notion.client`): `get_database`, `get_page`, `query_database`, `create_page`, `update_page`, `archive_page`, `unarchive_page`. Uses Notion API `2022-06-28`.
+- **`NotionAdapter`** (`app.integrations.notion.adapter`): `authenticate()`, `push(session, task_ids=None, course_ids=None, limit=500)` — maps `Task` → Notion properties; creates pages for tasks without `notion_page_id`, updates otherwise (and unarchives pages if Notion returns “archived” on update); stores `notion_page_id` on tasks. `pull_status_updates(session, task_ids=None)` — reads Status from Notion pages and updates TaskFlow tasks; optional `task_ids` or all tasks with `notion_page_id`; returns `{ updated, skipped, failed, total }`.
+- **Notion schemas** (`app.integrations.notion.schemas`): `NotionSyncRequest` (task_ids, course_ids), `NotionSyncResponse` (created, updated, failed, total); `NotionPullRequest` (task_ids), `NotionPullResponse` (updated, skipped, failed, total).
+- **`Task`** model has nullable `notion_page_id`; **`TaskRead`** exposes it. Push converts HTML in descriptions to plain text for Notion (e.g. Canvas assignment HTML).
+- **Completed tasks:** When pushing to Notion, tasks with status **completed** have their **Name** (title) sent with strikethrough annotation, so they appear scratched off in the Notion UI. Pending and archived tasks use normal title formatting.
 
 ---
 
@@ -307,7 +317,7 @@ docker compose -f backend/docker-compose.yml up -d
 1. Copy `backend/env.example.txt` to `backend/env.local.txt`.
 2. Set `DATABASE_URL` if different from default.
 3. Set `CANVAS_API_URL` and `CANVAS_API_TOKEN` for Canvas.
-4. Optional: `NOTION_API_TOKEN` and `NOTION_DATABASE_ID` for Notion push.
+4. Optional: `NOTION_API_TOKEN` and `NOTION_DATABASE_ID` for Notion push and pull.
 
 ### 10.3 Migrations
 
@@ -368,6 +378,7 @@ pytest -q
 - **Course filtering:** `course_ids` on `GET /api/tasks` filters Canvas tasks by `source_metadata.course.id`. Used by the Agenda UI for “selected courses” views.
 - **Date filtering:** `due_from` / `due_to` support agenda “from date onwards” and other range queries. Send ISO datetimes; backend uses `DateTime(timezone=True)`.
 - **AI prioritization:** Tasks are automatically prioritized during sync using date-based rules + OpenAI content analysis. Manual prioritization via `POST /api/tasks/prioritize`. Falls back to baseline if OpenAI API fails or key is missing.
+- **Notion pull:** `POST /api/integrations/notion/pull` reads the Status property from Notion pages and updates the corresponding TaskFlow tasks. Use after marking tasks completed/archived in Notion so TaskFlow stays in sync.
 
 ---
 
@@ -390,7 +401,7 @@ pytest -q
 | Canvas sync logic | `app/integrations/canvas/adapter.py` |
 | Canvas DTOs | `app/integrations/canvas/schemas.py` |
 | Notion client | `app/integrations/notion/client.py` |
-| Notion push logic | `app/integrations/notion/adapter.py` |
+| Notion push & pull logic | `app/integrations/notion/adapter.py` |
 | Notion DTOs | `app/integrations/notion/schemas.py` |
 | Scheduled sync | `app/jobs/sync_scheduler.py` |
 | Migrations | `alembic/versions/` |

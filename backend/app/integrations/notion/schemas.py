@@ -19,3 +19,18 @@ class NotionSyncResponse(BaseModel):
     updated: int
     failed: int
     total: int
+
+
+class NotionPullRequest(BaseModel):
+    """Optional body for POST /integrations/notion/pull."""
+
+    task_ids: list[str] | None = None
+
+
+class NotionPullResponse(BaseModel):
+    """Response for Notion pull (status sync from Notion to TaskFlow)."""
+
+    updated: int
+    skipped: int
+    failed: int
+    total: int
