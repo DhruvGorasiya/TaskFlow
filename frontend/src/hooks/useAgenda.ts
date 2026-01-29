@@ -6,35 +6,13 @@ import { getCanvasCourses, getTasks, patchTask } from "@/lib/api";
 import type { CanvasCourse } from "@/lib/api";
 import type { TaskStatus } from "@/types";
 import { todayYYYYMMDD, toISOStartOfLocalDay } from "@/lib/utils";
-
-const AGENDA_COURSE_IDS_KEY = "taskflow_agenda_course_ids";
-
-function loadStoredCourseIds(): number[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(AGENDA_COURSE_IDS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "number") : [];
-  } catch {
-    return [];
-  }
-}
-
-function storeCourseIds(ids: number[]) {
-  try {
-    localStorage.setItem(AGENDA_COURSE_IDS_KEY, JSON.stringify(ids));
-  } catch {
-    /* ignore */
-  }
-}
+import { loadSelectedCourseIds } from "@/lib/courseSelection";
 
 export interface UseAgendaResult {
   courses: CanvasCourse[];
   coursesLoading: boolean;
   coursesError: string | null;
   selectedCourseIds: number[];
-  setSelectedCourseIds: (ids: number[]) => void;
   startDate: string;
   setStartDate: (date: string) => void;
   tasks: Task[];
@@ -48,20 +26,30 @@ export function useAgenda(): UseAgendaResult {
   const [courses, setCourses] = useState<CanvasCourse[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [coursesError, setCoursesError] = useState<string | null>(null);
-  const [selectedCourseIds, setSelectedCourseIdsState] = useState<number[]>([]);
+  const [selectedCourseIds, setSelectedCourseIds] = useState<number[]>([]);
   const [startDate, setStartDate] = useState<string>(() => todayYYYYMMDD());
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const setSelectedCourseIds = useCallback((ids: number[]) => {
-    setSelectedCourseIdsState(ids);
-    storeCourseIds(ids);
-  }, []);
-
   useEffect(() => {
-    const stored = loadStoredCourseIds();
-    if (stored.length) setSelectedCourseIdsState(stored);
+    const stored = loadSelectedCourseIds();
+    setSelectedCourseIds(stored);
+    
+    // Listen for storage changes (when Settings updates course selection)
+    const handleStorageChange = () => {
+      const updated = loadSelectedCourseIds();
+      setSelectedCourseIds(updated);
+    };
+    window.addEventListener("storage", handleStorageChange);
+    
+    // Also listen for custom event for same-tab updates
+    window.addEventListener("courseSelectionChanged", handleStorageChange);
+    
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("courseSelectionChanged", handleStorageChange);
+    };
   }, []);
 
   const fetchCourses = useCallback(async () => {
@@ -133,7 +121,6 @@ export function useAgenda(): UseAgendaResult {
     coursesLoading,
     coursesError,
     selectedCourseIds,
-    setSelectedCourseIds,
     startDate,
     setStartDate,
     tasks,

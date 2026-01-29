@@ -14,13 +14,13 @@ export function Header() {
   const title = getTitle(pathname);
 
   return (
-    <header className="sticky top-0 z-30 hidden border-b border-slate-800 bg-slate-950/80 px-6 py-4 backdrop-blur md:block">
+    <header className="sticky top-0 z-30 border-b border-border bg-surface/90 px-4 py-4 backdrop-blur-sm md:px-6 md:py-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight text-slate-50">
+          <h1 className="text-page-title text-primary">
             {title}
           </h1>
-          <p className="mt-0.5 text-xs text-slate-400">
+          <p className="mt-1 text-caption text-muted">
             View and manage your unified task list.
           </p>
         </div>
@@ -28,4 +28,3 @@ export function Header() {
     </header>
   );
 }
-

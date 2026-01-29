@@ -11,18 +11,18 @@ interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 
 const variantClasses: Record<BadgeVariant, string> = {
   default:
-    "bg-slate-800/90 text-slate-100 border border-slate-700 shadow-sm shadow-slate-900/40",
+    "bg-elevated text-secondary border border-border",
   canvas:
-    "bg-sky-500/10 text-sky-300 border border-sky-500/60 shadow-sm shadow-sky-950/40",
+    "bg-accent-muted text-accent border border-accent/30",
   gmail:
-    "bg-red-500/10 text-red-300 border border-red-500/60 shadow-sm shadow-red-950/40",
+    "bg-error/10 text-error border border-error/30",
   calendar:
-    "bg-emerald-500/10 text-emerald-300 border border-emerald-500/60 shadow-sm shadow-emerald-950/40",
-  muted: "bg-slate-800/80 text-slate-300 border border-slate-700",
+    "bg-success/10 text-success border border-success/30",
+  muted: "bg-elevated text-muted border border-border-subtle",
 };
 
 export function Badge({ variant = "default", className, children, ...rest }: BadgeProps) {
-  const classes = `inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${variantClasses[variant]} ${
+  const classes = `inline-flex items-center rounded-full px-2.5 py-1 text-label font-medium ${variantClasses[variant]} ${
     className ?? ""
   }`;
   return (
@@ -31,4 +31,3 @@ export function Badge({ variant = "default", className, children, ...rest }: Bad
     </span>
   );
 }
-

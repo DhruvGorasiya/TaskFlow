@@ -9,19 +9,19 @@ interface TaskListProps {
 
 export function TaskList({ title, tasks, onToggleComplete }: TaskListProps) {
   return (
-    <section className="flex flex-col rounded-xl border border-slate-800 bg-slate-950/40 p-3 md:p-4">
-      <header className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-300">
+    <section className="flex flex-col rounded-xl border border-border bg-surface p-4 md:p-5">
+      <header className="mb-4 flex items-center justify-between gap-2">
+        <h2 className="text-section-title text-primary">
           {title}
         </h2>
-        <span className="text-[10px] font-medium text-slate-500">
+        <span className="text-caption text-muted">
           {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
         </span>
       </header>
       {tasks.length === 0 ? (
-        <p className="mt-1 text-xs text-slate-500">No tasks in this bucket.</p>
+        <p className="text-caption text-muted">No tasks in this bucket.</p>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-3">
           {tasks.map((task) => (
             <TaskCard
               key={task.id}
@@ -34,4 +34,3 @@ export function TaskList({ title, tasks, onToggleComplete }: TaskListProps) {
     </section>
   );
 }
-

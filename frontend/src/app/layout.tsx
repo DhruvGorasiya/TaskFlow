@@ -27,13 +27,13 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} h-full bg-slate-950 text-slate-50 antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans h-full bg-base text-primary antialiased`}
       >
-        <div className="min-h-screen flex bg-slate-950">
+        <div className="min-h-screen flex bg-base">
           <Sidebar />
           <div className="flex-1 flex flex-col">
             <Header />
-            <main className="flex-1 px-4 py-4 md:px-8 md:py-6 bg-slate-950">
+            <main className="flex-1 px-4 py-6 md:px-8 md:py-8 bg-base">
               {children}
             </main>
           </div>

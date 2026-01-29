@@ -11,8 +11,9 @@ import {
   todayYYYYMMDD,
 } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { triggerCanvasSync, triggerNotionSync, type NotionSyncResult } from "@/lib/api";
-import { Calendar, Loader2 } from "lucide-react";
+import { Calendar, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
 export function AgendaView() {
   const [syncing, setSyncing] = useState(false);
@@ -24,7 +25,6 @@ export function AgendaView() {
     coursesLoading,
     coursesError,
     selectedCourseIds,
-    setSelectedCourseIds,
     startDate,
     setStartDate,
     tasks,
@@ -39,13 +39,6 @@ export function AgendaView() {
 
   const handleTodayClick = () => {
     setStartDate(todayYYYYMMDD());
-  };
-
-  const toggleCourse = (id: number) => {
-    const next = selectedCourseIds.includes(id)
-      ? selectedCourseIds.filter((c) => c !== id)
-      : [...selectedCourseIds, id];
-    setSelectedCourseIds(next);
   };
 
   const handleSync = async () => {
@@ -86,154 +79,120 @@ export function AgendaView() {
       : "–";
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-6 md:space-y-8">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-slate-50 md:text-2xl">
+        <h1 className="text-page-title text-primary">
           Agenda
         </h1>
-        <p className="mt-1 text-xs text-slate-400 md:text-sm">
-          Select courses and a start date. Tasks from that date onwards are
-          shown, grouped by day. Completed tasks show with a strikethrough.
+        <p className="mt-1 text-caption text-muted">
+          View tasks grouped by day. Course selection is managed in Settings.
         </p>
       </div>
 
-      {/* Course toggles */}
-      <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-        <h2 className="mb-3 text-sm font-medium text-slate-300">
-          Courses to show
-        </h2>
-        {coursesLoading && (
-          <p className="text-sm text-slate-400">Loading courses…</p>
-        )}
-        {coursesError && (
-          <p className="text-sm font-medium text-red-400">{coursesError}</p>
-        )}
-        {!coursesLoading && !coursesError && courses.length === 0 && (
-          <p className="text-sm text-slate-500">
-            No Canvas courses. Configure Canvas in Settings and sync, or sync
-            below after selecting.
+      {/* Date range and actions */}
+      <Card>
+        <CardHeader>
+          <h2 className="text-section-title text-primary">
+            Date Range
+          </h2>
+          <p className="mt-0.5 text-caption text-muted">
+            Choose a start date to view tasks from that date onwards.
           </p>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {courses.map((c) => {
-            const checked = selectedCourseIds.includes(c.id);
-            return (
-              <label
-                key={c.id}
-                className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm transition-colors hover:border-slate-600 hover:bg-slate-900/60 has-checked:border-sky-500 has-checked:bg-sky-500/10"
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-label text-secondary">From date</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="h-10 min-w-40 rounded-lg border border-border bg-base px-3 text-body text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-base"
+                aria-label="Show tasks from this date onwards"
+              />
+            </label>
+            <div className="flex items-end">
+              <Button variant="secondary" onClick={handleTodayClick}>
+                Today
+              </Button>
+            </div>
+            <span className="text-caption text-muted self-center">{dateRange}</span>
+          </div>
+
+          {selectedCourseIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border-subtle">
+              <Button
+                variant="secondary"
+                onClick={handleSync}
+                disabled={syncing || isLoading}
+                loading={syncing}
               >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggleCourse(c.id)}
-                  className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-sky-500"
-                />
-                <span className="text-slate-200">
-                  {c.name ?? `Course ${c.id}`}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-        {!coursesLoading && courses.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button
-              variant="secondary"
-              onClick={handleSync}
-              disabled={!selectedCourseIds.length || syncing || isLoading}
-            >
-              {syncing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Sync selected"
-              )}
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={handleNotionPush}
-              disabled={!selectedCourseIds.length || notionSyncing}
-            >
-              {notionSyncing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Push selected to Notion"
-              )}
-            </Button>
-            <Button variant="secondary" onClick={refetch}>
-              Refresh
-            </Button>
-          </div>
-        )}
+                {syncing ? "Syncing…" : "Sync selected"}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={handleNotionPush}
+                disabled={notionSyncing}
+                loading={notionSyncing}
+              >
+                {notionSyncing ? "Pushing…" : "Push selected to Notion"}
+              </Button>
+              <Button variant="secondary" onClick={refetch}>
+                Refresh
+              </Button>
+            </div>
+          )}
 
-        {notionError && (
-          <p className="mt-3 text-sm font-medium text-red-400">{notionError}</p>
-        )}
-        {notionResult && !notionError && (
-          <div className="mt-4 rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-300">
-            <p className="font-medium text-slate-50">
-              Pushed {notionResult.total} tasks to Notion
-            </p>
-            <p className="mt-1 text-slate-400">
-              {notionResult.created} created, {notionResult.updated} updated,{" "}
-              {notionResult.failed} failed.
-            </p>
-          </div>
-        )}
-      </section>
-
-      {/* Start date, Today, date range, view */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex flex-col gap-1 text-xs text-slate-400">
-            <span>From date</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="rounded-md border border-slate-700 bg-slate-950/80 px-2 py-1.5 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-              aria-label="Show tasks from this date onwards"
-            />
-          </label>
-          <Button variant="secondary" onClick={handleTodayClick}>
-            Today
-          </Button>
-          <span className="text-sm text-slate-400">{dateRange}</span>
-        </div>
-        <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-950/60 p-1">
-          <span className="rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-slate-200">
-            Agenda
-          </span>
-          <span className="rounded px-2 py-1 text-xs text-slate-500">
-            Week
-          </span>
-          <span className="rounded px-2 py-1 text-xs text-slate-500">
-            Month
-          </span>
-        </div>
-      </div>
+          {notionError && (
+            <div className="flex items-center gap-2 rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-body font-medium text-error">
+              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {notionError}
+            </div>
+          )}
+          {notionResult && !notionError && (
+            <div className="flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-body text-success">
+              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>
+                Pushed {notionResult.total} tasks to Notion ({notionResult.created}{" "}
+                created, {notionResult.updated} updated, {notionResult.failed}{" "}
+                failed).
+              </span>
+            </div>
+          )}
+        </CardBody>
+      </Card>
 
       {!selectedCourseIds.length && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-8 text-center">
-          <Calendar className="mx-auto h-10 w-10 text-slate-600" />
-          <p className="mt-2 text-sm text-slate-400">
-            Select at least one course above to view the agenda.
+        <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-surface px-6 py-12 text-center">
+          <Calendar className="h-12 w-12 text-muted" aria-hidden="true" />
+          <p className="mt-4 text-body font-medium text-primary">
+            Select courses to view agenda
+          </p>
+          <p className="mt-1 text-caption text-muted max-w-sm">
+            Go to Settings to select which Canvas courses to display.
           </p>
         </div>
       )}
 
       {selectedCourseIds.length > 0 && error && (
-        <p className="text-sm font-medium text-red-400">{error}</p>
+        <div className="flex items-center gap-2 rounded-xl border border-error/40 bg-error/10 px-4 py-3 text-body font-medium text-error">
+          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {error}
+        </div>
       )}
 
       {selectedCourseIds.length > 0 && isLoading && (
-        <p className="text-sm text-slate-400">Loading tasks…</p>
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-6 text-secondary">
+          <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden="true" />
+          <p className="text-body">Loading tasks…</p>
+        </div>
       )}
 
-        {selectedCourseIds.length > 0 &&
+      {selectedCourseIds.length > 0 &&
         !isLoading &&
         !error &&
         sortedDays.length === 0 && (
-          <p className="text-sm text-slate-400">
+          <p className="text-body text-muted">
             No tasks from {formatDayHeader(startDate)} onwards for the selected
             courses. Sync above, choose an earlier date, or add tasks elsewhere.
           </p>
@@ -245,12 +204,12 @@ export function AgendaView() {
             <section
               key={dayKey}
               ref={dayKey === todayKey ? todayRef : undefined}
-              className="rounded-xl border border-slate-800 bg-slate-900/30 p-4"
+              className="rounded-xl border border-border bg-surface p-4 md:p-5"
             >
-              <h2 className="mb-3 text-sm font-semibold text-slate-200">
+              <h2 className="text-section-title text-primary mb-4">
                 {formatDayHeader(dayKey)}
               </h2>
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {(byDay.get(dayKey) ?? []).map((task) => (
                   <AgendaItem
                     key={task.id}
@@ -277,32 +236,28 @@ function AgendaItem({ task, onToggleComplete }: AgendaItemProps) {
   const time = task.due_date ? formatAgendaTime(task.due_date) : null;
 
   return (
-    <li className="flex items-start gap-3 rounded-lg border border-slate-800/80 bg-slate-950/40 px-3 py-2 transition-colors hover:border-slate-700">
+    <li className="flex items-start gap-3 rounded-lg border border-border bg-elevated px-4 py-3 transition-colors hover:border-border">
       <input
         type="checkbox"
         checked={isCompleted}
         onChange={() => onToggleComplete(task)}
-        className="mt-1.5 h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-900 text-sky-500"
+        className="mt-0.5 h-4 w-4 shrink-0 rounded border-border bg-base text-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-base"
         aria-label={isCompleted ? "Mark as pending" : "Mark as completed"}
       />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-2">
           {time && (
-            <span className="text-xs text-slate-500">
-              Due {time}
-            </span>
+            <span className="text-caption text-muted">Due {time}</span>
           )}
           {task.course_or_category && (
-            <span className="text-xs text-slate-500">
+            <span className="text-caption text-muted">
               {task.course_or_category}
             </span>
           )}
         </div>
         <h3
-          className={`mt-0.5 font-medium ${
-            isCompleted
-              ? "text-slate-500 line-through"
-              : "text-slate-100"
+          className={`mt-0.5 text-card-title ${
+            isCompleted ? "text-muted line-through" : "text-primary"
           }`}
         >
           {task.title}

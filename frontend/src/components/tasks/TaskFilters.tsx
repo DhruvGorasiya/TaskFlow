@@ -35,8 +35,8 @@ export function TaskFilters({
     };
 
   return (
-    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-      <div className="flex flex-1 flex-wrap gap-2">
+    <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div className="flex flex-1 flex-wrap gap-4">
         <FilterSelect
           label="Source"
           value={filters.source}
@@ -69,12 +69,13 @@ export function TaskFilters({
           ]}
         />
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center">
         <Button
           variant="secondary"
           type="button"
           onClick={onRefresh}
           disabled={isLoading}
+          loading={isLoading}
         >
           {isLoading ? "Refreshing…" : "Refresh"}
         </Button>
@@ -92,10 +93,10 @@ interface FilterSelectProps {
 
 function FilterSelect({ label, value, onChange, options }: FilterSelectProps) {
   return (
-    <label className="flex flex-col gap-1 text-xs text-slate-300">
-      <span>{label}</span>
+    <label className="flex flex-col gap-1.5">
+      <span className="text-label text-secondary">{label}</span>
       <select
-        className="h-8 min-w-[8rem] rounded-md border border-slate-700 bg-slate-950/80 px-2 text-xs text-slate-100 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+        className="h-10 min-w-40 rounded-lg border border-border bg-base px-3 text-body text-primary shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-base"
         value={value}
         onChange={onChange}
       >
@@ -108,4 +109,3 @@ function FilterSelect({ label, value, onChange, options }: FilterSelectProps) {
     </label>
   );
 }
-

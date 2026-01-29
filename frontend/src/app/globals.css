@@ -1,26 +1,117 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Design tokens: calm palette (dark theme).
+   Base = app background, Surface = cards/sidebars, Surface elevated = modals.
+   Spacing scale: 4, 6, 8, 12, 16 (Tailwind units).
+   --------------------------------------------------------------------------- */
 :root {
-  --background: #020617;
-  --foreground: #e2e8f0;
+  /* Backgrounds */
+  --bg-base: #0f1419;
+  --bg-surface: #1a1f26;
+  --bg-surface-elevated: #232a33;
+
+  /* Text */
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-inverse: #0f1419;
+
+  /* Borders */
+  --border-default: #334155;
+  --border-subtle: #1e293b;
+
+  /* Accent (muted teal) */
+  --accent: #0d9488;
+  --accent-hover: #14b8a6;
+  --accent-muted: rgba(13, 148, 136, 0.18);
+
+  /* Semantic (toned down) */
+  --semantic-success: #34d399;
+  --semantic-warning: #fbbf24;
+  --semantic-error: #f87171;
+
+  /* Legacy aliases for gradual migration */
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* Colors (semantic names for utilities: bg-base, text-primary, etc.) */
+  --color-base: var(--bg-base);
+  --color-surface: var(--bg-surface);
+  --color-elevated: var(--bg-surface-elevated);
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-inverse: var(--text-inverse);
+  --color-border: var(--border-default);
+  --color-border-subtle: var(--border-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-muted: var(--accent-muted);
+  --color-success: var(--semantic-success);
+  --color-warning: var(--semantic-warning);
+  --color-error: var(--semantic-error);
+
+  /* Fonts */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Font sizes for typography scale (used by utility classes below) */
+  --text-page-title: 1.5rem;
+  --text-section-title: 0.875rem;
+  --text-card-title: 0.9375rem;
+  --text-body: 0.875rem;
+  --text-caption: 0.8125rem;
+  --text-label: 0.75rem;
+
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #020617;
-    --foreground: #e2e8f0;
+    /* Already dark; no change */
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg-base);
+  color: var(--text-primary);
 }
 
+/* Typography utility classes */
+.text-page-title {
+  font-size: var(--text-page-title);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: var(--line-height-tight);
+}
+.text-section-title {
+  font-size: var(--text-section-title);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: var(--line-height-normal);
+}
+.text-card-title {
+  font-size: var(--text-card-title);
+  font-weight: 500;
+  line-height: var(--line-height-normal);
+}
+.text-body {
+  font-size: var(--text-body);
+  font-weight: 400;
+  line-height: var(--line-height-normal);
+}
+.text-caption {
+  font-size: var(--text-caption);
+  font-weight: 400;
+  line-height: var(--line-height-normal);
+}
+.text-label {
+  font-size: var(--text-label);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: var(--line-height-normal);
+}

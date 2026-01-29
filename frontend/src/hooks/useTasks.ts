@@ -18,7 +18,14 @@ interface UseTasksResult {
   updateTaskLocal: (id: string, changes: Partial<Task>) => void;
 }
 
-export function useTasks(filters: TaskFiltersState): UseTasksResult {
+/**
+ * @param filters - Source, status, and course/category filters (ignored when courseIds is provided)
+ * @param courseIds - Optional Canvas course IDs. When provided, only tasks from these courses are fetched (all sources, all statuses).
+ */
+export function useTasks(
+  filters: TaskFiltersState,
+  courseIds: number[] | null = null,
+): UseTasksResult {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,13 +35,24 @@ export function useTasks(filters: TaskFiltersState): UseTasksResult {
     setError(null);
     try {
       const params: Parameters<typeof getTasks>[0] = {};
-      if (filters.source !== "all") params.source = filters.source;
-      if (filters.status !== "all") params.status = filters.status;
-      // For simplicity we let backend handle due date filters later if needed
+      
+      // When courseIds is provided, filter by course IDs and show all tasks from those courses
+      if (courseIds != null && courseIds.length > 0) {
+        params.course_ids = courseIds;
+        // Don't apply source/status filters when filtering by course IDs
+      } else {
+        // Only apply filters when not filtering by course IDs
+        if (filters.source !== "all") params.source = filters.source;
+        if (filters.status !== "all") params.status = filters.status;
+      }
+      
       const data = await getTasks(params);
 
+      // Only apply courseOrCategory filter when not filtering by course IDs
       const filtered =
-        filters.courseOrCategory === "all"
+        courseIds != null && courseIds.length > 0
+          ? data // Show all tasks when filtering by course IDs
+          : filters.courseOrCategory === "all"
           ? data
           : data.filter(
               (t) => t.course_or_category === filters.courseOrCategory,
@@ -48,7 +66,7 @@ export function useTasks(filters: TaskFiltersState): UseTasksResult {
     } finally {
       setIsLoading(false);
     }
-  }, [filters]);
+  }, [filters.source, filters.status, filters.courseOrCategory, courseIds ? courseIds.join(",") : null]);
 
   useEffect(() => {
     void fetchTasks();
@@ -84,4 +102,3 @@ export function useTasks(filters: TaskFiltersState): UseTasksResult {
 
   return { tasks, isLoading, error, refetch, updateTaskLocal };
 }
-
