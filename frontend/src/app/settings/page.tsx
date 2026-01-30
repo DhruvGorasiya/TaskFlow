@@ -1,13 +1,10 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { triggerCanvasSync, getCanvasCourses } from "@/lib/api";
-import type { CanvasCourse } from "@/lib/api";
+import { useState } from "react";
+import { triggerCanvasSync } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
-import { CheckCircle2, AlertCircle, Settings2, BookOpen } from "lucide-react";
-import { loadSelectedCourseIds, storeSelectedCourseIds } from "@/lib/courseSelection";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, AlertCircle, Settings2 } from "lucide-react";
 
 interface SyncResult {
   created: number;
@@ -19,48 +16,6 @@ export default function SettingsPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [result, setResult] = useState<SyncResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const [courses, setCourses] = useState<CanvasCourse[]>([]);
-  const [coursesLoading, setCoursesLoading] = useState(true);
-  const [coursesError, setCoursesError] = useState<string | null>(null);
-  const [selectedCourseIds, setSelectedCourseIds] = useState<number[]>([]);
-
-  useEffect(() => {
-    const stored = loadSelectedCourseIds();
-    setSelectedCourseIds(stored);
-  }, []);
-
-  const fetchCourses = useCallback(async () => {
-    setCoursesLoading(true);
-    setCoursesError(null);
-    try {
-      const data = await getCanvasCourses();
-      setCourses(data);
-    } catch (err) {
-      setCoursesError(err instanceof Error ? err.message : "Failed to load courses.");
-      setCourses([]);
-    } finally {
-      setCoursesLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchCourses();
-  }, [fetchCourses]);
-
-  const handleCourseToggle = (id: number) => {
-    const next = selectedCourseIds.includes(id)
-      ? selectedCourseIds.filter((c) => c !== id)
-      : [...selectedCourseIds, id];
-    setSelectedCourseIds(next);
-    storeSelectedCourseIds(next);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/7cba70ce-b46b-404a-8c4b-820a762188e6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/app/settings/page.tsx:handleCourseToggle',message:'User toggled course selection',data:{toggledId:id,nextIdsCount:next.length,nextIds:next.slice().sort((a,b)=>a-b)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-    fetch('/api/__debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/app/settings/page.tsx:handleCourseToggle',message:'User toggled course selection (relay)',data:{toggledId:id,nextIdsCount:next.length,nextIds:next.slice().sort((a,b)=>a-b)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-    // #endregion
-    // Dispatch custom event for same-tab updates
-    window.dispatchEvent(new Event("courseSelectionChanged"));
-  };
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -85,72 +40,9 @@ export default function SettingsPage() {
           Settings
         </h1>
         <p className="mt-1 text-caption text-muted">
-          Manage integrations, course selection, and synchronization for TaskFlow.
+          Manage integrations and synchronization for TaskFlow.
         </p>
       </div>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-muted border border-accent/20">
-              <BookOpen className="h-5 w-5 text-accent" aria-hidden="true" />
-            </div>
-            <div>
-              <h2 className="text-section-title text-primary">
-                Courses to Show
-              </h2>
-              <p className="mt-0.5 text-caption text-muted">
-                Select which Canvas courses to display on Dashboard and Agenda pages.
-                Leave all unchecked to show tasks from every course.
-              </p>
-            </div>
-          </div>
-        </CardHeader>
-        <CardBody className="space-y-4">
-          {coursesLoading && (
-            <div className="flex items-center gap-2 text-body text-muted">
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
-              Loading courses…
-            </div>
-          )}
-          {coursesError && (
-            <div className="flex items-center gap-2 rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-body font-medium text-error">
-              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {coursesError}
-            </div>
-          )}
-          {!coursesLoading && !coursesError && courses.length === 0 && (
-            <p className="text-body text-muted">
-              No Canvas courses. Configure Canvas integration and sync to load courses.
-            </p>
-          )}
-          {!coursesLoading && courses.length > 0 && (
-            <div className="flex flex-wrap gap-3">
-              {courses.map((c) => {
-                const checked = selectedCourseIds.includes(c.id);
-                return (
-                  <label
-                    key={c.id}
-                    className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-body transition-colors ${
-                      checked
-                        ? "border-accent bg-accent-muted text-accent"
-                        : "border-border bg-elevated text-secondary hover:border-border hover:bg-surface"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => handleCourseToggle(c.id)}
-                      className="h-4 w-4 shrink-0 rounded border-border bg-base text-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-base"
-                    />
-                    <span>{c.name ?? `Course ${c.id}`}</span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </CardBody>
-      </Card>
 
       <Card>
         <CardHeader>
@@ -204,7 +96,7 @@ export default function SettingsPage() {
             Notion
           </h2>
           <p className="mt-0.5 text-caption text-muted">
-            Push tasks to Notion from the Agenda page.
+            Push tasks to Notion from the Agenda page after selecting courses.
           </p>
         </CardHeader>
         <CardBody>

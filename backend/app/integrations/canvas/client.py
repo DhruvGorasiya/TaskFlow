@@ -39,9 +39,13 @@ class CanvasClient:
             status_code = exc.response.status_code
             if status_code in (401, 403):
                 raise IntegrationAuthError("Canvas authentication failed") from exc
-            raise IntegrationRequestError(f"Canvas request failed ({status_code})") from exc
+            raise IntegrationRequestError(
+                f"Canvas request failed ({status_code})"
+            ) from exc
         except httpx.HTTPError as exc:
-            raise IntegrationRequestError("Canvas request failed (network error)") from exc
+            raise IntegrationRequestError(
+                "Canvas request failed (network error)"
+            ) from exc
 
     async def get_user(self) -> dict[str, Any]:
         """Validate token by fetching the current user."""
@@ -51,7 +55,7 @@ class CanvasClient:
         self, *, per_page: int = 50, enrollment_state: str = "active"
     ) -> list[CanvasCourse]:
         """List courses for the authenticated user.
-        
+
         Args:
             per_page: Number of results per page.
             enrollment_state: Filter by enrollment state. Options:
@@ -90,4 +94,3 @@ class CanvasClient:
             params["include[]"] = "submission"
         raw = await self._get(f"/courses/{course_id}/assignments", params=params)
         return [CanvasAssignment.model_validate(item) for item in raw]
-

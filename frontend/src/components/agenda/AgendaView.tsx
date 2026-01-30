@@ -25,6 +25,7 @@ export function AgendaView() {
     coursesLoading,
     coursesError,
     selectedCourseIds,
+    setSelectedCourseIds,
     startDate,
     setStartDate,
     tasks,
@@ -39,6 +40,13 @@ export function AgendaView() {
 
   const handleTodayClick = () => {
     setStartDate(todayYYYYMMDD());
+  };
+
+  const toggleCourse = (id: number) => {
+    const next = selectedCourseIds.includes(id)
+      ? selectedCourseIds.filter((c) => c !== id)
+      : [...selectedCourseIds, id];
+    setSelectedCourseIds(next);
   };
 
   const handleSync = async () => {
@@ -85,46 +93,95 @@ export function AgendaView() {
           Agenda
         </h1>
         <p className="mt-1 text-caption text-muted">
-          View tasks grouped by day. Course selection is managed in Settings.
+          Select courses and a start date. Tasks from that date onwards are
+          shown, grouped by day. Completed tasks show with a strikethrough.
         </p>
       </div>
 
-      {/* Date range and actions */}
+      {/* Setup: Courses and date range */}
       <Card>
         <CardHeader>
           <h2 className="text-section-title text-primary">
-            Date Range
+            Setup
           </h2>
           <p className="mt-0.5 text-caption text-muted">
-            Choose a start date to view tasks from that date onwards.
+            Choose courses and date range, then sync or push to Notion.
           </p>
         </CardHeader>
-        <CardBody className="space-y-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-label text-secondary">From date</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="h-10 min-w-40 rounded-lg border border-border bg-base px-3 text-body text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-base"
-                aria-label="Show tasks from this date onwards"
-              />
-            </label>
-            <div className="flex items-end">
-              <Button variant="secondary" onClick={handleTodayClick}>
-                Today
-              </Button>
+        <CardBody className="space-y-6">
+          <section>
+            <h3 className="text-label text-secondary mb-3">Courses to show</h3>
+            {coursesLoading && (
+              <div className="flex items-center gap-2 text-body text-muted">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+                Loading courses…
+              </div>
+            )}
+            {coursesError && (
+              <div className="flex items-center gap-2 rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-body font-medium text-error">
+                <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {coursesError}
+              </div>
+            )}
+            {!coursesLoading && !coursesError && courses.length === 0 && (
+              <p className="text-body text-muted">
+                No Canvas courses. Configure Canvas in Settings and sync, or
+                sync below after selecting.
+              </p>
+            )}
+            <div className="flex flex-wrap gap-3 mt-2">
+              {courses.map((c) => {
+                const checked = selectedCourseIds.includes(c.id);
+                return (
+                  <label
+                    key={c.id}
+                    className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-body transition-colors ${
+                      checked
+                        ? "border-accent bg-accent-muted text-accent"
+                        : "border-border bg-elevated text-secondary hover:border-border hover:bg-surface"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleCourse(c.id)}
+                      className="h-4 w-4 shrink-0 rounded border-border bg-base text-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-base"
+                    />
+                    <span>{c.name ?? `Course ${c.id}`}</span>
+                  </label>
+                );
+              })}
             </div>
-            <span className="text-caption text-muted self-center">{dateRange}</span>
-          </div>
+          </section>
 
-          {selectedCourseIds.length > 0 && (
+          <section>
+            <h3 className="text-label text-secondary mb-3">Date range</h3>
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-label text-secondary">From date</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="h-10 min-w-40 rounded-lg border border-border bg-base px-3 text-body text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-base"
+                  aria-label="Show tasks from this date onwards"
+                />
+              </label>
+              <div className="flex items-end">
+                <Button variant="secondary" onClick={handleTodayClick}>
+                  Today
+                </Button>
+              </div>
+              <span className="text-caption text-muted self-center">{dateRange}</span>
+            </div>
+          </section>
+
+          {!coursesLoading && courses.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border-subtle">
               <Button
                 variant="secondary"
                 onClick={handleSync}
-                disabled={syncing || isLoading}
+                disabled={!selectedCourseIds.length || syncing || isLoading}
                 loading={syncing}
               >
                 {syncing ? "Syncing…" : "Sync selected"}
@@ -132,7 +189,7 @@ export function AgendaView() {
               <Button
                 variant="secondary"
                 onClick={handleNotionPush}
-                disabled={notionSyncing}
+                disabled={!selectedCourseIds.length || notionSyncing}
                 loading={notionSyncing}
               >
                 {notionSyncing ? "Pushing…" : "Push selected to Notion"}
@@ -169,7 +226,7 @@ export function AgendaView() {
             Select courses to view agenda
           </p>
           <p className="mt-1 text-caption text-muted max-w-sm">
-            Go to Settings to select which Canvas courses to display.
+            Choose at least one course above to see tasks grouped by day.
           </p>
         </div>
       )}

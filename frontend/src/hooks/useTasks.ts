@@ -18,14 +18,7 @@ interface UseTasksResult {
   updateTaskLocal: (id: string, changes: Partial<Task>) => void;
 }
 
-/**
- * @param filters - Source, status, and course/category filters (ignored when courseIds is provided)
- * @param courseIds - Optional Canvas course IDs. When provided, only tasks from these courses are fetched (all sources, all statuses).
- */
-export function useTasks(
-  filters: TaskFiltersState,
-  courseIds: number[] | null = null,
-): UseTasksResult {
+export function useTasks(filters: TaskFiltersState): UseTasksResult {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,29 +28,13 @@ export function useTasks(
     setError(null);
     try {
       const params: Parameters<typeof getTasks>[0] = {};
-      
-      // When courseIds is provided, filter by course IDs and show all tasks from those courses
-      if (courseIds != null && courseIds.length > 0) {
-        params.course_ids = courseIds;
-        // Don't apply source/status filters when filtering by course IDs
-      } else {
-        // Only apply filters when not filtering by course IDs
-        if (filters.source !== "all") params.source = filters.source;
-        if (filters.status !== "all") params.status = filters.status;
-      }
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/7cba70ce-b46b-404a-8c4b-820a762188e6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/hooks/useTasks.ts:fetchTasks',message:'Fetching tasks',data:{hasCourseFilter:Boolean(courseIds && courseIds.length>0),courseIds:courseIds ?? null,params},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-      fetch('/api/__debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/hooks/useTasks.ts:fetchTasks',message:'Fetching tasks (relay)',data:{hasCourseFilter:Boolean(courseIds && courseIds.length>0),courseIds:courseIds ?? null,params},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
-      
+      if (filters.source !== "all") params.source = filters.source;
+      if (filters.status !== "all") params.status = filters.status;
+      // For simplicity we let backend handle due date filters later if needed
       const data = await getTasks(params);
 
-      // Only apply courseOrCategory filter when not filtering by course IDs
       const filtered =
-        courseIds != null && courseIds.length > 0
-          ? data // Show all tasks when filtering by course IDs
-          : filters.courseOrCategory === "all"
+        filters.courseOrCategory === "all"
           ? data
           : data.filter(
               (t) => t.course_or_category === filters.courseOrCategory,
@@ -71,7 +48,7 @@ export function useTasks(
     } finally {
       setIsLoading(false);
     }
-  }, [filters.source, filters.status, filters.courseOrCategory, courseIds ? courseIds.join(",") : null]);
+  }, [filters]);
 
   useEffect(() => {
     void fetchTasks();
@@ -107,3 +84,4 @@ export function useTasks(
 
   return { tasks, isLoading, error, refetch, updateTaskLocal };
 }
+

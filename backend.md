@@ -29,6 +29,7 @@ This document describes **everything implemented** in the TaskFlow backend: stru
 | DB driver | asyncpg |
 | Migrations | Alembic |
 | HTTP client | httpx (async) |
+| AI client | OpenAI Python SDK (optional) |
 | Config | pydantic-settings |
 | Scheduler | APScheduler (optional) |
 | Tests | pytest, pytest-asyncio |
@@ -112,9 +113,9 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 | `database_url` | `str` | `postgresql+asyncpg://postgres:postgres@localhost:5432/taskflow` | Async SQLAlchemy URL |
 | `canvas_api_url` | `str \| None` | `None` | Canvas base URL (no `/api/v1`). Required for Canvas. |
 | `canvas_api_token` | `str \| None` | `None` | Canvas API token. Required for Canvas. |
-| `notion_api_token` | `str \| None` | `None` | Notion integration token. Required for Notion push. |
-| `notion_database_id` | `str \| None` | `None` | Notion database ID. Required for Notion push. |
-| `openai_api_key` | `str \| None` | `None` | OpenAI API key. Optional: enables AI-powered task prioritization. |
+| `notion_api_token` | `str \| None` | `None` | Notion integration token. Required for Notion push/pull. |
+| `notion_database_id` | `str \| None` | `None` | Notion database ID. Required for Notion push/pull. |
+| `openai_api_key` | `str \| None` | `None` | OpenAI API key. Optional: enables AI-powered task prioritization. If unset (or quota exceeded), prioritization falls back to date-based rules only. |
 | `enable_scheduler` | `bool` | `False` | If `True`, start APScheduler on app startup |
 | `sync_interval_minutes` | `int` | `15` | Canvas sync interval when scheduler enabled |
 | `cors_origins` | `str \| None` | `None` | Comma-separated allowed origins. If unset, `http://localhost:3000` and `http://127.0.0.1:3000` |
@@ -202,7 +203,7 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 |--------|------|-------------|
 | `GET` | `/api/integrations/canvas/courses` | List active Canvas courses for UI toggles. Returns `[{ id, name }]`. 401 if auth fails, 502 on request errors. |
 | `POST` | `/api/integrations/canvas/sync` | Trigger Canvas sync. Optional body: `{ "course_ids": [1, 2, 3] }`. If present, only those courses are synced; otherwise all active courses. Returns `{ created, updated, total, prioritized, skipped, ai_used }`. 200 OK. 401 auth error, 502 request error. |
-| `POST` | `/api/integrations/notion/sync` | Push tasks to Notion. Only **pending** and **archived** tasks are pushed; completed tasks are not kept in Notion (existing Notion pages for completed tasks are archived). Optional body: `{ "task_ids": ["uuid", ...] }` (takes precedence), or `{ "course_ids": [1, 2, 3] }` (Canvas only). If no body provided, pushes all non-completed (up to 500). Returns `{ created, updated, archived, failed, total }`. 200 OK. 401/502 on auth/request errors. |
+| `POST` | `/api/integrations/notion/sync` | Push tasks to Notion. Only **pending** and **archived** tasks are created/updated; completed tasks are not kept in Notion (existing Notion pages for completed tasks are archived and TaskFlow clears `notion_page_id`). Optional body: `{ "task_ids": ["uuid", ...] }` (takes precedence), or `{ "course_ids": [1, 2, 3] }` (Canvas only). If no body provided, pushes all non-completed (up to 500). Returns `{ created, updated, archived, failed, total }`. 200 OK. 401/502 on auth/request errors. |
 | `POST` | `/api/integrations/notion/pull` | Pull status updates from Notion into TaskFlow. When Status is changed in Notion (e.g. completed), this syncs it back. Optional body: `{ "task_ids": ["uuid", ...] }`; if omitted, syncs all tasks with `notion_page_id`. Returns `{ updated, skipped, failed, total }`. 200 OK. 401/502 on auth/request errors. |
 
 ### 6.4 Dependencies
@@ -280,11 +281,12 @@ Config is loaded via **pydantic-settings** in `app/config.py`. Env vars override
 
 - **Direction:** TaskFlow **pushes** tasks to a Notion database (destination) and can **pull** status changes from Notion back into TaskFlow.
 - **Config:** `NOTION_API_TOKEN`, `NOTION_DATABASE_ID`. Database must have properties: **Name** (title), **Description** (rich_text), **Due Date** (date), **Priority** (select: high|medium|low|none), **Status** (select: pending|completed|archived), **Course** (rich_text), **Source** (rich_text).
-- **`NotionClient`** (`app.integrations.notion.client`): `get_database`, `get_page`, `query_database`, `create_page`, `update_page`, `archive_page`, `unarchive_page`. Uses Notion API `2022-06-28`.
-- **`NotionAdapter`** (`app.integrations.notion.adapter`): `authenticate()`, `push(session, task_ids=None, course_ids=None, limit=500)` — only **pending** and **archived** tasks are pushed; **completed** tasks are not kept in Notion (any existing Notion page for a completed task is archived so it disappears from the database and calendar). Creates pages for tasks without `notion_page_id`, updates otherwise (and unarchives pages if Notion returns “archived” on update); stores `notion_page_id` on tasks. Returns `{ created, updated, archived, failed, total }`. `pull_status_updates(session, task_ids=None)` — reads Status from Notion pages and updates TaskFlow tasks; optional `task_ids` or all tasks with `notion_page_id`; returns `{ updated, skipped, failed, total }`.
+- **`NotionClient`** (`app.integrations.notion.client`): `get_database`, `get_page`, `query_database`, `create_page`, `update_page`, `archive_page`, `unarchive_page`. Uses Notion API `2022-06-28`. Error messages attempt to surface Notion’s JSON `message`; if Notion returns an HTML Cloudflare error page, the error is truncated to a readable title.
+- **`NotionAdapter`** (`app.integrations.notion.adapter`): `authenticate()`, `push(session, task_ids=None, course_ids=None, limit=500)` — archives linked pages for tasks that are now `completed` (and clears `notion_page_id`), then creates/updates Notion pages for tasks with status `pending` or `archived`. It also unarchives pages if Notion returns “archived” on update. Returns `{ created, updated, archived, failed, total }`. `pull_status_updates(session, task_ids=None)` — reads Status from Notion pages and updates TaskFlow tasks; optional `task_ids` or all tasks with `notion_page_id`; returns `{ updated, skipped, failed, total }`. Pull retries once per page on transient 500/502/503 errors and continues on per-page failures.
 - **Notion schemas** (`app.integrations.notion.schemas`): `NotionSyncRequest` (task_ids, course_ids), `NotionSyncResponse` (created, updated, archived, failed, total); `NotionPullRequest` (task_ids), `NotionPullResponse` (updated, skipped, failed, total).
 - **`Task`** model has nullable `notion_page_id`; **`TaskRead`** exposes it. Push converts HTML in descriptions to plain text for Notion (e.g. Canvas assignment HTML).
 - **Completed tasks:** Completed tasks are **not** stored in Notion. When pushing, any task with status **completed** that already has a Notion page has that page archived (removed from the database and from Notion Calendar). Only pending and archived tasks are created or updated in Notion.
+- **“Scratch off” workflow:** Mark a task as done in Notion by setting **Status = `completed`**. Then call `POST /api/integrations/notion/pull` to sync that completion back to TaskFlow. The next time you run `POST /api/integrations/notion/sync`, TaskFlow will archive that completed page and remove it from the Notion database/calendar view.
 - **Notion Calendar:** TaskFlow pushes only non-completed tasks to a single Notion database (`NOTION_DATABASE_ID`). To see those tasks in **Notion Calendar**, connect Notion Calendar to that same database in its settings. Tasks appear on the calendar by **Due Date**. Completed tasks are not in the database, so they do not appear in Notion Calendar.
 
 ---
